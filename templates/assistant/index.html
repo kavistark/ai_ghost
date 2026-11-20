@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GHOST – AI Voice Assistant (Django)</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600&family=Noto+Sans+Tamil:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#030812;--p:rgba(6,20,38,.78);--ink:#d4f6ff;--mute:#6f9bb0;--line:rgba(0,229,255,.25);--a:#00e5ff;--a2:#4dffb8;--warm:#ff8a3d;--soft:rgba(0,229,255,.07);--glow:rgba(0,229,255,.35);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#dfeaf2;--p:rgba(255,255,255,.85);--ink:#0b2433;--mute:#4d6f82;--line:rgba(0,120,150,.35);--a:#007c99;--a2:#00875a;--warm:#d4620f;--soft:rgba(0,124,153,.08);--glow:rgba(0,124,153,.3)}}
+:root[data-theme="light"]{--bg:#dfeaf2;--p:rgba(255,255,255,.85);--ink:#0b2433;--mute:#4d6f82;--line:rgba(0,120,150,.35);--a:#007c99;--a2:#00875a;--warm:#d4620f;--soft:rgba(0,124,153,.08);--glow:rgba(0,124,153,.3)}
+*,*:before,*:after{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;color:var(--ink);font:500 14px/1.35 "Rajdhani","Noto Sans Tamil",system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);position:relative}
+body:before{content:"";position:fixed;inset:0;background:linear-gradient(var(--line) 1px,transparent 1px) 0 0/48px 48px,linear-gradient(90deg,var(--line) 1px,transparent 1px) 0 0/48px 48px;opacity:.22;animation:gm 9s linear infinite;pointer-events:none}
+body:after{content:"";position:fixed;left:0;right:0;height:140px;top:-140px;background:linear-gradient(transparent,var(--glow),transparent);opacity:.18;animation:scan 6s linear infinite;pointer-events:none}
+@keyframes gm{to{background-position:0 48px,48px 0}}
+@keyframes scan{to{top:100%}}
+button,input,select{font:inherit;color:inherit}
+header{position:relative;z-index:2;display:flex;align-items:center;gap:16px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--p)}
+.logo{font:900 20px Orbitron,sans-serif;letter-spacing:.35em;color:var(--a);text-shadow:0 0 12px var(--a)}
+.sp{flex:1}
+.stat{display:flex;gap:6px;align-items:center;color:var(--mute)}
+.stat u{width:8px;height:8px;border-radius:50%;background:var(--a2);box-shadow:0 0 10px var(--a2);animation:bl 1.6s infinite}
+@keyframes bl{50%{opacity:.25}}
+#clock{font:700 15px Orbitron,sans-serif;color:var(--a);font-variant-numeric:tabular-nums}
+.sys{display:flex;gap:12px;color:var(--mute);font-size:12px}.sys b{color:var(--a);font-family:Orbitron,sans-serif;font-weight:500}
+.board{position:relative;z-index:1;flex:1;min-height:0;display:grid;gap:10px;padding:10px;grid-template-columns:1fr 1.35fr 1.1fr 1.1fr;grid-template-rows:repeat(3,minmax(0,1fr));grid-template-areas:"sch orb web call" "tsk orb web com" "rem pln job agt"}
+.pn{background:var(--p);border:1px solid var(--line);display:flex;flex-direction:column;min-height:0;min-width:0;position:relative;overflow:hidden;backdrop-filter:blur(4px);clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px));animation:on .6s both}
+.pn:before{content:"";position:absolute;left:0;top:0;width:34px;height:2px;background:var(--a);box-shadow:0 0 8px var(--a)}
+.pn:after{content:"";position:absolute;right:0;bottom:0;width:34px;height:2px;background:var(--a);box-shadow:0 0 8px var(--a)}
+@keyframes on{0%{opacity:0}30%{opacity:.8}45%{opacity:.2}70%{opacity:1}100%{opacity:1}}
+.ph{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--line);font:600 11px Orbitron,sans-serif;letter-spacing:.14em;color:var(--a);text-transform:uppercase}
+.ph i{width:6px;height:6px;background:var(--a);box-shadow:0 0 8px var(--a);transform:rotate(45deg)}
+.pb{padding:9px 12px;overflow:auto;flex:1;min-height:0;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.tag{margin-left:auto;font:500 10px Rajdhani,sans-serif;letter-spacing:.08em;padding:1px 8px;border:1px solid var(--line);color:var(--mute)}
+.tag.live{border-color:var(--warm);color:var(--warm)}
+.s{grid-area:sch}.t{grid-area:tsk}.r{grid-area:rem}.o{grid-area:orb}.w{grid-area:web}.j{grid-area:job}.c{grid-area:call}.m{grid-area:com}.g{grid-area:agt}.p2{grid-area:pln}
+.pn:nth-child(2){animation-delay:.15s}.pn:nth-child(3){animation-delay:.3s}.pn:nth-child(5){animation-delay:.45s}.pn:nth-child(7){animation-delay:.6s}.pn:nth-child(9){animation-delay:.75s}
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px dashed var(--line)}
+li:last-child{border:0}
+li.done span{text-decoration:line-through;color:var(--mute)}
+.time{color:var(--a);font:500 12px Orbitron,sans-serif;min-width:48px}
+.inp{width:100%;padding:5px 9px;border:1px solid var(--line);background:var(--soft);min-width:0;outline:0}
+.inp:focus{border-color:var(--a);box-shadow:0 0 8px var(--glow)}
+select.inp option{background:#06141f;color:#d4f6ff}
+.btn{border:1px solid var(--a);background:var(--soft);color:var(--a);padding:5px 11px;cursor:pointer;font:600 11px Orbitron,sans-serif;letter-spacing:.08em;white-space:nowrap;transition:.15s}
+.btn:hover{background:var(--a);color:#021019;box-shadow:0 0 14px var(--glow)}
+.row{display:flex;gap:6px;align-items:center;margin-top:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{border:1px solid var(--line);background:transparent;padding:2px 10px;cursor:pointer;font-size:13px;transition:.15s}
+.chip:hover,.chip.on{border-color:var(--a);color:var(--a);box-shadow:0 0 8px var(--glow)}
+:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+.res{border-left:2px solid var(--a);background:var(--soft);padding:7px 10px;margin-top:8px;display:none;white-space:pre-line}
+/* core */
+.o .pb{display:flex;flex-direction:column;align-items:center;justify-content:space-between;text-align:center;gap:4px;padding-bottom:12px}
+.core{position:relative;width:min(100%,46vh);aspect-ratio:1;flex:1;min-height:0;max-height:100%;border:0;background:none;cursor:pointer;padding:0}
+.core svg{width:100%;height:100%;overflow:visible}
+.rg{transform-box:fill-box;transform-origin:center;fill:none;stroke:var(--a)}
+.r1{animation:sp 24s linear infinite}.r2{animation:sp 14s linear infinite reverse}.r3{animation:sp 9s linear infinite}.r4{animation:sp 40s linear infinite reverse}
+@keyframes sp{to{transform:rotate(360deg)}}
+.nuc{fill:var(--a);opacity:.9;filter:drop-shadow(0 0 10px var(--a));transform-box:fill-box;transform-origin:center;animation:br 3s ease-in-out infinite}
+@keyframes br{50%{transform:scale(1.1);opacity:1}}
+.core.on .nuc{animation-duration:.5s}
+.core.on .r1{animation-duration:6s}.core.on .r2{animation-duration:4s}.core.on .r3{animation-duration:2.5s}
+.gh{font:900 22px Orbitron,sans-serif;letter-spacing:.3em;fill:#021019;text-anchor:middle}
+.say{font:500 15px Rajdhani,sans-serif;min-height:38px;max-width:430px;color:var(--ink)}
+.wave{display:flex;gap:3px;align-items:center;height:24px}
+.wave b{width:3px;height:3px;background:var(--a);box-shadow:0 0 6px var(--a);transition:height .12s}
+.big{font:700 24px Orbitron,sans-serif;color:var(--a);text-shadow:0 0 10px var(--glow)}
+.mute{color:var(--mute)}
+.bars{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:430px;margin:4px 0}
+.bar{font-size:11px;color:var(--mute);text-align:left;letter-spacing:.08em}
+.bar div{height:4px;background:var(--soft);margin-top:3px;border:1px solid var(--line)}.bar span{display:block;height:100%;background:var(--a);box-shadow:0 0 6px var(--a);transition:width 1s}
+.sw{position:relative;width:38px;height:18px;margin-left:auto}
+.sw input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer;z-index:1}
+.sw s{position:absolute;inset:0;border:1px solid var(--a);transition:.2s}
+.sw s:after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;background:var(--mute);transition:.2s}
+.sw input:checked+s:after{left:22px;background:var(--a);box-shadow:0 0 8px var(--a)}
+.msg{border-left:2px solid var(--a2);background:var(--soft);padding:5px 9px;margin-bottom:6px}.msg small{display:block;color:var(--mute);font-size:13px}
+.tabs{display:flex;gap:6px;margin-bottom:6px}
+.pane{display:none}.pane.on{display:block}
+.ta{font-size:17px;margin-top:8px;color:var(--a2)}
+#boot{position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;font:500 13px Orbitron,sans-serif;color:var(--a);letter-spacing:.2em;transition:opacity .7s}
+#boot h1{margin:0 0 10px;font:900 clamp(40px,9vw,90px) Orbitron,sans-serif;letter-spacing:.4em;text-shadow:0 0 24px var(--a);padding-left:.4em}
+#boot.out{opacity:0;pointer-events:none}
+.heard{color:var(--mute);font-size:13px;min-height:17px}.pn.hit{animation:hit 1.3s}@keyframes hit{0%,50%{background:var(--glow)}100%{background:var(--p)}}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}.cal b{color:var(--mute);font:500 10px Orbitron,sans-serif}.day{position:relative;border:1px solid transparent;background:none;padding:2px 0;cursor:pointer;font-size:13px}.day:hover{border-color:var(--a)}.day.today{background:var(--a);color:#021019;font-weight:700}.day.sel{border-color:var(--warm)}.day u{position:absolute;left:50%;bottom:1px;width:4px;height:4px;margin-left:-2px;background:var(--warm);border-radius:50%}
+.pbar{width:min(320px,70vw);height:4px;border:1px solid var(--line);background:var(--soft)}.pbar span{display:block;height:100%;width:0;background:var(--a);box-shadow:0 0 10px var(--a)}#pct{font-size:12px}#boot.go #start{display:none}
+.admin-link{font:600 11px Orbitron,sans-serif;color:var(--a2);text-decoration:none;border:1px solid var(--a2);padding:4px 8px;border-radius:2px;letter-spacing:.08em;transition:.2s}
+.admin-link:hover{background:var(--a2);color:#021019;box-shadow:0 0 10px var(--a2)}
+@media(max-width:1000px){html{height:auto}body{overflow:auto;display:block;height:auto}.board{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:none;grid-auto-rows:auto;grid-template-areas:"orb orb" "sch tsk" "rem job" "pln web" "call com" "agt agt"}.pn{min-height:230px}.o{min-height:540px}.core{width:min(78vw,380px);flex:none}.sys,.stat{display:none}header{flex-wrap:wrap;gap:8px;padding:8px 12px}.logo{font-size:16px}#clock{font-size:13px}}
+@media(max-width:640px){.board{grid-template-columns:1fr;gap:8px;padding:8px;grid-template-areas:"orb" "sch" "tsk" "rem" "pln" "job" "web" "call" "com" "agt"}.pn{min-height:0}.pn .pb{max-height:340px}.o .pb{max-height:none}.inp,select.inp{font-size:16px}.row{flex-wrap:wrap}.row .inp{flex:1 1 120px}.btn{min-height:36px}.chip{padding:5px 12px}.say{font-size:16px}#clock{display:none}header .btn{padding:5px 9px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important}}
+</style>
+</head>
+<body>
+<div id="boot"><h1>GHOST</h1><div id="bl">SYSTEM READY</div><div class="pbar"><span id="pf"></span></div><div id="pct">0%</div><button class="btn" id="start" style="margin-top:14px;padding:10px 22px;font-size:13px">Tap to start</button></div>
+<header>
+  <div class="logo">GHOST</div>
+  <span class="stat"><u></u>DJANGO BACKEND ONLINE · TAMIL + ENGLISH</span>
+  <span class="sp"></span>
+  <a href="/admin/" target="_blank" class="admin-link">Django Admin</a>
+  <span class="sys">CPU <b id="cpu">0</b>%<span>NET <b id="net">0</b> ms</span></span>
+  <span id="clock"></span>
+  <button class="btn" id="snd">Sound on</button><button class="btn" id="theme">Theme</button>
+</header>
+
+<div class="board">
+
+<section class="pn s"><div class="ph"><i></i>Schedule<span class="tag">Today</span></div><div class="pb"><ul id="sched"></ul></div></section>
+
+<section class="pn t"><div class="ph"><i></i>Tasks<span class="tag" id="tc"></span></div><div class="pb"><ul id="tasks"></ul><div class="row"><input class="inp" id="tin" placeholder="Add a task"><button class="btn" id="tadd">Add</button></div></div></section>
+
+<section class="pn r"><div class="ph"><i></i>Reminders · meetings<span class="tag live">Armed</span></div><div class="pb">
+  <div class="mute">Next: Design review, 3:00 PM</div><div class="big" id="cd">—</div>
+  <ul id="rem"></ul>
+  <div class="row"><input class="inp" id="rin" placeholder="Remind me to…"><input class="inp" id="rt" type="time" value="18:00" style="width:96px"><button class="btn" id="radd">Set</button></div>
+</div></section>
+
+<section class="pn o"><div class="ph"><i></i>Ghost core<span class="tag live" id="state">Standby</span></div><div class="pb">
+  <button class="core" id="orb" aria-label="Talk to Ghost">
+  <svg viewBox="0 0 300 300" aria-hidden="true">
+    <circle class="rg r4" cx="150" cy="150" r="142" stroke-width="1" stroke-dasharray="2 6"/>
+    <circle class="rg r1" cx="150" cy="150" r="128" stroke-width="4" stroke-dasharray="70 30 20 30" opacity=".8"/>
+    <circle class="rg r2" cx="150" cy="150" r="108" stroke-width="10" stroke-dasharray="3 5" opacity=".6"/>
+    <circle class="rg r3" cx="150" cy="150" r="90" stroke-width="2" stroke-dasharray="120 40 10 40" stroke="var(--warm)"/>
+    <circle class="rg" cx="150" cy="150" r="74" stroke-width="1" opacity=".7"/>
+    <circle class="nuc" cx="150" cy="150" r="52"/>
+    <circle cx="150" cy="150" r="52" fill="none" stroke="#021019" stroke-width="1" opacity=".4"/>
+    <text class="gh" x="150" y="158">GHOST</text>
+  </svg></button>
+  <div class="wave" id="wave" aria-hidden="true"></div>
+  <div class="heard" id="heard">Tap the core and speak, or type below.</div><div class="say" id="say">Ghost online. Connected to Django backend.</div><div class="row" style="width:100%;max-width:430px;margin:2px 0"><input class="inp" id="cmd" placeholder="Or type: add task call Ravi" aria-label="Type a command"><button class="btn" id="cmdgo">Send</button></div>
+  <div class="bars"><div class="bar">MEMORY<div><span id="b1" style="width:60%"></span></div></div><div class="bar">VOICE LINK<div><span id="b2" style="width:80%"></span></div></div><div class="bar">AGENT LOAD<div><span id="b3" style="width:30%"></span></div></div></div>
+  <div class="chips" id="cmds" style="justify-content:center;margin:0">
+    <button class="chip">Plan my day</button><button class="chip">Next meeting?</button><button class="chip">Find AI jobs</button><button class="chip">Any missed calls?</button><button class="chip">Run agent</button>
+  </div>
+</div></section>
+
+<section class="pn p2"><div class="ph"><i></i>Daily plan<button class="btn" id="plan" style="margin-left:auto;padding:2px 9px">Create</button></div><div class="pb"><ul id="planl"><li class="mute">No plan yet. Say “plan my day”.</li></ul></div></section>
+
+<section class="pn w"><div class="ph"><i></i>Internet assistant<span class="tag">Web</span></div><div class="pb">
+  <div class="row" style="margin-top:0"><input class="inp" id="q" placeholder="Search Google or ask a question"><button class="btn" id="go">Search</button></div>
+  <div class="chips" id="wc"><button class="chip" data-k="info">Find information</button><button class="chip" data-k="sum">Summarize website</button><button class="chip" data-k="jobs">Find jobs</button><button class="chip" data-k="tech">Research tech topic</button></div>
+  <div class="res" id="wres"></div>
+</div></section>
+
+<section class="pn j"><div class="ph"><i></i>Calendar<button class="btn" id="cprev" style="margin-left:auto;padding:1px 8px" aria-label="Previous month">&lt;</button><span id="cmon" style="min-width:104px;text-align:center"></span><button class="btn" id="cnext" style="padding:1px 8px" aria-label="Next month">&gt;</button></div><div class="pb"><div class="cal" id="cal"></div><div class="mute" id="cinfo" style="margin-top:6px"></div></div></section>
+
+<section class="pn c"><div class="ph"><i></i>AI phone service<label class="sw"><input type="checkbox" id="csw" checked aria-label="Answer calls"><s></s></label></div><div class="pb">
+  <div class="mute" id="cst" style="margin-bottom:6px">Answering calls and taking messages.</div>
+  <div id="msgs"></div>
+  <button class="btn" id="sim">Simulate call</button>
+</div></section>
+
+<section class="pn m"><div class="ph"><i></i>Communicate</div><div class="pb">
+  <div class="tabs" id="tabs"><button class="chip on" data-t="tr">Tamil ⇄ English</button><button class="chip" data-t="dr">Draft</button><button class="chip" data-t="bk">Book</button></div>
+  <div class="pane on" id="tr">
+    <div class="row" style="margin-top:0"><select class="inp" id="dir" style="width:130px"><option value="en">English → தமிழ்</option><option value="ta">தமிழ் → English</option></select><input class="inp" id="tin2" placeholder="Type a phrase"></div>
+    <div class="chips" id="phr"></div><div class="ta" id="tout">Pick a phrase.</div>
+  </div>
+  <div class="pane" id="dr">
+    <div class="row" style="margin-top:0"><select class="inp" id="dt" style="width:110px"><option value="reschedule">Reschedule</option><option value="followup">Follow-up</option><option value="thanks">Thank you</option></select><input class="inp" id="dn" placeholder="To (name)"><button class="btn" id="dgo">Draft</button></div>
+    <div class="res" id="dres"></div>
+  </div>
+  <div class="pane" id="bk">
+    <div class="row" style="margin-top:0"><input class="inp" id="an" placeholder="With whom / what"></div>
+    <div class="row"><input class="inp" id="ad" type="date"><input class="inp" id="at" type="time" value="11:00" style="width:96px"><button class="btn" id="ago">Book</button></div>
+    <div class="res" id="ares"></div>
+  </div>
+</div></section>
+
+<section class="pn g"><div class="ph"><i></i>Autonomous agent<span class="tag live" id="agst">Idle</span></div><div class="pb">
+  <div class="row" style="margin-top:0"><input class="inp" id="goal" placeholder="Goal: find 5 remote Python jobs"><button class="btn" id="run">Run</button></div>
+  <ul id="alog"><li class="mute">Activity appears here. You approve sends and bookings.</li></ul>
+</div></section>
+
+</div>
+
+<!-- Initial Data from Django Context -->
+<script id="django-context" type="application/json">
+{
+  "tasks": {{ tasks_json|safe }},
+  "schedule": {{ schedule_json|safe }},
+  "reminders": {{ reminders_json|safe }},
+  "messages": {{ messages_json|safe }},
+  "plan": {{ plan_json|safe }}
+}
+</script>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const E=(t,h)=>{const e=document.createElement(t);e.innerHTML=h;return e};
+const tm=()=>new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+const rnd=(a,b)=>Math.round(a+Math.random()*(b-a));
+
+/* Read Django Context */
+let djData={tasks:[],schedule:[],reminders:[],messages:[],plan:[]};
+try{
+  djData=JSON.parse($('#django-context').textContent);
+}catch(e){}
+
+/* sound */
+let AC=null,sfxOn=true;
+function tone(f,d,t,v,s0,f2){if(!AC)return;const o=AC.createOscillator(),g=AC.createGain(),n=AC.currentTime+(s0||0);o.type=t||'sine';o.frequency.setValueAtTime(f,n);if(f2)o.frequency.exponentialRampToValueAtTime(f2,n+d);g.gain.setValueAtTime(v||.08,n);g.gain.exponentialRampToValueAtTime(.0001,n+d);o.connect(g);g.connect(AC.destination);o.start(n);o.stop(n+d)}
+const sfx={boot:()=>{tone(60,3.4,'sawtooth',.06,0,520);tone(120,3.4,'sine',.06,0,1000)},tick:()=>tone(1300,.06,'square',.03),click:()=>tone(900,.04,'square',.02),ready:()=>{tone(660,.15,'sine',.09);tone(880,.15,'sine',.09,.12);tone(1320,.4,'sine',.09,.24)},on:()=>{tone(520,.12,'triangle',.08);tone(780,.14,'triangle',.08,.1)},off:()=>{tone(780,.12,'triangle',.08);tone(440,.16,'triangle',.08,.1)}};
+function play(n){if(sfxOn&&AC)try{sfx[n]()}catch(e){}}
+document.addEventListener('click',e=>{if(e.target.closest('button')&&e.target.id!=='start')play('click')});
+$('#snd').onclick=()=>{sfxOn=!sfxOn;$('#snd').textContent=sfxOn?'Sound on':'Sound off';if(sfxOn)play('click')};
+
+/* boot loader */
+$('#start').onclick=()=>{
+  try{AC=new(window.AudioContext||window.webkitAudioContext)();AC.resume()}catch(e){}
+  $('#boot').classList.add('go');play('boot');
+  const L=[[0,'INITIALIZING CORE'],[28,'CONNECTING DJANGO BACKEND'],[56,'SYNCING SQLITE DB'],[82,'ACTIVATING VOICE LINK'],[100,'GHOST ONLINE']];
+  let n=0,li=0;
+  const iv=setInterval(()=>{
+    n=Math.min(100,n+1+Math.random()*2.2);$('#pf').style.width=n+'%';$('#pct').textContent=Math.floor(n)+'%';
+    while(li<L.length&&n>=L[li][0]){$('#bl').textContent=L[li][1];if(li)play('tick');li++}
+    if(n>=100){clearInterval(iv);play('ready');setTimeout(()=>{$('#boot').classList.add('out');say('Ghost online. Connected to Django backend.')},500)}
+  },40);
+};
+
+const clk=()=>$('#clock').textContent=new Date().toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+clk();setInterval(clk,15000);
+setInterval(()=>{$('#cpu').textContent=rnd(8,34);$('#net').textContent=rnd(18,60);$('#b1').style.width=rnd(45,75)+'%';$('#b2').style.width=rnd(70,98)+'%';$('#b3').style.width=rnd(15,60)+'%'},2000);
+$('#theme').onclick=()=>{const r=document.documentElement;r.dataset.theme=getComputedStyle(r).getPropertyValue('--bg').trim()==='#030812'?'light':'dark'};
+
+/* voice agent */
+const wave=$('#wave');for(let i=0;i<34;i++)wave.appendChild(E('b',''));
+let wt,speaking=false,listening=false,rec=null;
+function setState(s){const pv=$('#state').textContent;$('#state').textContent=s;if(s==='Listening'&&pv!=='Listening')play('on');if(s==='Standby'&&pv==='Listening')play('off');const a=s!=='Standby';$('#orb').classList.toggle('on',a);clearInterval(wt);$$('#wave b').forEach(b=>b.style.height='3px');if(a)wt=setInterval(()=>$$('#wave b').forEach(b=>b.style.height=rnd(3,22)+'px'),110)}
+function say(r){$('#say').textContent=r;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(r);if(/[\u0B80-\u0BFF]/.test(r))u.lang='ta-IN';speaking=true;u.onend=u.onerror=()=>speaking=false;speechSynthesis.speak(u)}catch(e){speaking=false}}
+const hit=sel=>{play('tick');const p=$(sel).closest('.pn');if(p){p.classList.remove('hit');void p.offsetWidth;p.classList.add('hit')}};
+const tab=id=>{$$('#tabs .chip').forEach(c=>c.classList.toggle('on',c.dataset.t===id));$$('.pane').forEach(p=>p.classList.toggle('on',p.id===id))};
+const show=(sel,t)=>{const r=$(sel);r.style.display='block';r.textContent=t};
+
+function openG(q){const u='https://www.google.com/search?q='+encodeURIComponent(q),r=$('#wres'),a=document.createElement('a');r.style.display='block';r.innerHTML='';a.href=u;a.target='_blank';a.rel='noopener';a.textContent='Open Google results for “'+q+'”';r.appendChild(a);try{window.open(u,'_blank','noopener')}catch(e){}}
+
+/* actions Ghost can run on the dashboard */
+const A={
+ add_task:a=>{tasks.unshift({id:a.id||Date.now(),text:a.text,completed:false});dT();hit('#tasks')},
+ complete_task:a=>{const t=tasks.find(t=>t.text.toLowerCase().includes((a.text||'').toLowerCase()));if(t){t.completed=true;dT();hit('#tasks')}},
+ add_reminder:a=>{rems.push({time:a.time||'09:00',text:a.text});rems.sort((x,y)=>x.time.localeCompare(y.time));dR();hit('#rem')},
+ add_schedule:a=>{sched.push({time:a.time||'09:00',title:a.title||a.what});sched.sort((x,y)=>x.time.localeCompare(y.time));dS();dC();hit('#sched')},
+ create_plan:a=>{const items=(a.items&&a.items.length?a.items:planList);$('#planl').innerHTML=items.map(i=>`<li><span>${typeof i==='string'?i:(i.time+' '+i.activity)}</span></li>`).join('');hit('#planl')},
+ search_web:a=>{$('#q').value=a.query;openG(a.query);hit('#q')},
+ web_answer:a=>{show('#wres',a.answer+'\n\n(Ghost Intelligence)');hit('#wres')},
+ translate:a=>{tab('tr');$('#tin2').value=a.source||'';$('#tout').textContent=a.result;hit('#tout')},
+ draft:a=>{tab('dr');show('#dres',a.body);hit('#dres')},
+ book:a=>{tab('bk');$('#an').value=a.what||'';$('#ad').value=a.date||new Date().toISOString().slice(0,10);$('#at').value=a.time||'11:00';$('#ago').click();hit('#ares')},
+ call_service:a=>{$('#csw').checked=!!a.on;$('#cst').textContent=a.on?'Answering calls and taking messages.':'Paused. Calls go to normal voicemail.';hit('#cst')},
+ run_agent:a=>{runAgent(a.goal,a.steps);hit('#alog')},
+ set_theme:a=>{document.documentElement.dataset.theme=a.mode==='light'?'light':'dark'}
+};
+
+/* DJANGO BACKEND BRAIN */
+async function brain(text){
+  try{
+    const res=await fetch('/api/command/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:text})
+    });
+    if(res.ok){
+      return await res.json();
+    }
+  }catch(e){
+    console.warn('API error, falling back locally', e);
+  }
+  // Local fallback
+  return {reply:'Command processed.',actions:[]};
+}
+
+async function handle(text){
+  text=(text||'').replace(/^(hey |ok )?ghost[,.! ]*/i,'').trim();
+  if(!text)return;
+  $('#heard').textContent='You: '+text;
+  setState('Thinking');
+  const r=await brain(text)||{};
+  setState(listening?'Listening':'Standby');
+  say(r.reply||'Done.');
+  (r.actions||[]).forEach(a=>{try{A[a.type]&&A[a.type](a)}catch(e){}});
+}
+
+/* microphone */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+function micToggle(){
+  if(listening){
+    listening=false;
+    if(rec)rec.stop();
+    setState('Standby');
+    return;
+  }
+  if(SR){
+    try{
+      rec=new SR();
+      rec.continuous=true;
+      rec.lang='en-IN';
+      rec.onresult=e=>{const t=e.results[e.results.length-1][0].transcript;if(!speaking)handle(t)};
+      rec.onend=()=>{if(listening)try{rec.start()}catch(e){}};
+      rec.onerror=ev=>{
+        if(/not-allowed|service-not-allowed/.test(ev.error)){
+          listening=false;setState('Standby');say('Microphone is blocked. Type a command instead.');
+        }
+      };
+      rec.start();listening=true;setState('Listening');return;
+    }catch(e){}
+  }
+  say('Voice input not supported in this browser. Type a command below.');
+}
+$('#orb').onclick=micToggle;
+$('#cmds').onclick=e=>{if(e.target.classList.contains('chip'))handle(e.target.textContent)};
+const sendCmd=()=>{const v=$('#cmd').value.trim();if(v){$('#cmd').value='';handle(v)}};
+$('#cmdgo').onclick=sendCmd;$('#cmd').onkeydown=e=>{if(e.key==='Enter')sendCmd()};
+
+/* SCHEDULE */
+let sched=djData.schedule.map(s=>({time:s.time,title:s.title}));
+const dS=()=>$('#sched').innerHTML=sched.map(s=>`<li><span class="time">${s.time}</span><span>${s.title}</span></li>`).join('');
+dS();
+
+/* DAILY PLAN */
+let planList=djData.plan.length?djData.plan:[
+  {time:'09:00',activity:'Deep work: demo slides'},
+  {time:'10:30',activity:'Leave for doctor'},
+  {time:'13:00',activity:'Lunch, send invoice'},
+  {time:'15:00',activity:'Design review'},
+  {time:'18:00',activity:'Call mom'},
+  {time:'19:00',activity:'Gym'}
+];
+function mkPlan(){
+  $('#planl').innerHTML=planList.map(i=>`<li><span>${i.time||''} ${i.activity||i.text||i}</span></li>`).join('');
+}
+$('#plan').onclick=mkPlan;
+mkPlan();
+
+/* TASKS */
+let tasks=djData.tasks.map(t=>({id:t.id,text:t.text,completed:t.completed}));
+function dT(){
+  $('#tasks').innerHTML='';
+  tasks.forEach(t=>{
+    const l=E('li',`<input type="checkbox" ${t.completed?'checked':''} aria-label="Done"><span>${t.text}</span>`);
+    if(t.completed)l.className='done';
+    l.querySelector('input').onchange=async e=>{
+      t.completed=e.target.checked;
+      dT();
+      try{
+        await fetch('/api/tasks/',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({action:'toggle',id:t.id,completed:t.completed})
+        });
+      }catch(err){}
+    };
+    $('#tasks').appendChild(l);
+  });
+  $('#tc').textContent=tasks.filter(t=>!t.completed).length+' open';
+}
+$('#tadd').onclick=async()=>{
+  const v=$('#tin').value.trim();
+  if(v){
+    $('#tin').value='';
+    try{
+      const res=await fetch('/api/tasks/',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'add',text:v})
+      });
+      const data=await res.json();
+      tasks.unshift(data.task||{id:Date.now(),text:v,completed:false});
+    }catch(e){
+      tasks.unshift({id:Date.now(),text:v,completed:false});
+    }
+    dT();
+  }
+};
+dT();
+
+/* REMINDERS */
+let rems=djData.reminders.map(r=>({time:r.time,text:r.text}));
+const dR=()=>$('#rem').innerHTML=rems.map(r=>`<li><span class="time">${r.time}</span><span>${r.text}</span></li>`).join('');
+dR();
+$('#radd').onclick=async()=>{
+  const v=$('#rin').value.trim(), t=$('#rt').value;
+  if(v){
+    $('#rin').value='';
+    try{
+      const res=await fetch('/api/reminders/',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({text:v,time:t})
+      });
+      const data=await res.json();
+      rems.push(data.reminder||{time:t,text:v});
+    }catch(e){
+      rems.push({time:t,text:v});
+    }
+    rems.sort((x,y)=>x.time.localeCompare(y.time));
+    dR();
+  }
+};
+
+function cd(){
+  const t=new Date();t.setHours(15,0,0,0);
+  if(t<new Date())t.setDate(t.getDate()+1);
+  const d=t-new Date(),h=Math.floor(d/36e5),m=Math.floor(d%36e5/6e4);
+  $('#cd').textContent=(h?h+'h ':'')+m+'m left';
+}
+cd();setInterval(cd,30000);
+
+/* WEB ASSISTANT */
+$('#go').onclick=()=>{const q=$('#q').value.trim();if(q)window.open('https://www.google.com/search?q='+encodeURIComponent(q),'_blank','noopener')};
+$('#q').onkeydown=e=>{if(e.key==='Enter')$('#go').click()};
+const web={info:'Ghost reads top results, cross-checks them and gives a short answer with sources.',sum:'Paste a link. Ghost returns a 5-line summary with key facts and dates.',jobs:'Ghost scans job boards daily and ranks roles by skills, place and salary.',tech:'Ghost gathers docs and articles, then explains the topic with code examples.'};
+$('#wc').onclick=e=>{const k=e.target.dataset.k;if(k){const r=$('#wres');r.style.display='block';r.textContent=web[k]}};
+
+/* MESSAGES & CALLS */
+let phoneMessages=djData.messages.map(m=>({caller:m.caller,time:m.time,message:m.message}));
+function dM(){
+  $('#msgs').innerHTML=phoneMessages.map(m=>`<div class="msg"><b>${m.caller} · ${m.time}</b><small>${m.message}</small></div>`).join('');
+}
+dM();
+$('#csw').onchange=e=>$('#cst').textContent=e.target.checked?'Answering calls and taking messages.':'Paused. Calls go to normal voicemail.';
+$('#sim').onclick=async()=>{
+  if(!$('#csw').checked)return;
+  const caller='Lakshmi', msg='“Is the apartment still available?” Told her you’ll call back tonight.';
+  try{
+    const res=await fetch('/api/messages/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({caller:caller,message:msg})
+    });
+    const data=await res.json();
+    phoneMessages.unshift(data.message_item||{caller:caller,time:tm(),message:msg});
+  }catch(e){
+    phoneMessages.unshift({caller:caller,time:tm(),message:msg});
+  }
+  dM();
+};
+
+/* COMMUNICATE */
+$('#tabs').onclick=e=>{const t=e.target.dataset.t;if(!t)return;$$('#tabs .chip').forEach(c=>c.classList.toggle('on',c===e.target));$$('.pane').forEach(p=>p.classList.toggle('on',p.id===t))};
+const P=[['Good morning','காலை வணக்கம்'],['Thank you','நன்றி'],['Where is the meeting?','கூட்டம் எங்கே?'],['Call me later','பிறகு அழையுங்கள்']];
+function dP(){const d=$('#dir').value;$('#phr').innerHTML='';P.forEach(p=>{const c=E('button',p[d==='en'?0:1]);c.className='chip';c.onclick=()=>{$('#tin2').value=c.textContent;tr()};$('#phr').appendChild(c)})}
+function tr(){const d=$('#dir').value,v=$('#tin2').value.trim().toLowerCase(),m=P.find(p=>p[d==='en'?0:1].toLowerCase()===v);$('#tout').textContent=m?m[d==='en'?1:0]:'Connect translation service for open text. Try a phrase above.'}
+$('#dir').onchange=()=>{dP();$('#tin2').value='';$('#tout').textContent='Pick a phrase.'};$('#tin2').oninput=tr;dP();
+
+const D={reschedule:n=>`Subject: Request to reschedule\n\nHi ${n},\nSomething came up. Could we move our meeting to tomorrow at 4 PM?\n\nThanks, Arun`,followup:n=>`Subject: Following up\n\nHi ${n},\nChecking in on our last chat. Do you need anything from me to move forward?\n\nBest, Arun`,thanks:n=>`Subject: Thank you\n\nHi ${n},\nThank you for your time today. I appreciate your help.\n\nRegards, Arun`};
+$('#dgo').onclick=()=>{const r=$('#dres');r.style.display='block';r.textContent=D[$('#dt').value]($('#dn').value.trim()||'there')};
+
+$('#ago').onclick=async()=>{
+  const w=$('#an').value.trim(),d=$('#ad').value,t=$('#at').value;
+  if(!w||!d)return;
+  const r=$('#ares');r.style.display='block';
+  r.textContent=`Booked: ${w}, ${new Date(d).toLocaleDateString([],{day:'numeric',month:'short'})} at ${t}. Added to schedule.`;
+  try{
+    await fetch('/api/schedule/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({title:w,date:d,time:t})
+    });
+  }catch(e){}
+  sched.push({time:t,title:w});
+  sched.sort((x,y)=>x.time.localeCompare(y.time));
+  dS();evs[d]=(evs[d]||0)+1;dC();
+};
+
+/* AUTONOMOUS AGENT */
+function runAgent(g,steps){
+  g=(typeof g==='string'&&g)||$('#goal').value.trim()||'Find 5 remote Python jobs and email me a summary';
+  const l=$('#alog');l.innerHTML='';$('#agst').textContent='Working';
+  const st=['Goal: '+g].concat(steps&&steps.length?steps:['Searching web for target roles','Analyzing qualifications and pay bands','Generating executive briefing'],['Waiting for your approval']);
+  st.forEach((s,i)=>setTimeout(()=>{
+    const li=E('li','<span class="time"></span><span></span>');
+    li.children[0].textContent=tm();li.children[1].textContent=s;
+    l.appendChild(li);
+    if(i===st.length-1)$('#agst').textContent='Needs approval';
+  },i*800));
+}
+$('#run').onclick=()=>runAgent();
+
+/* CALENDAR */
+const evs={};let cm=new Date();cm.setDate(1);let csel='';
+const key=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function dC(){
+  const y=cm.getFullYear(),m=cm.getMonth(),f=new Date(y,m,1).getDay(),n=new Date(y,m+1,0).getDate(),tk=key(new Date());
+  $('#cmon').textContent=cm.toLocaleDateString([],{month:'short',year:'numeric'});
+  let h=['S','M','T','W','T','F','S'].map(d=>'<b>'+d+'</b>').join('');
+  for(let i=0;i<f;i++)h+='<i></i>';
+  for(let d=1;d<=n;d++){
+    const k=key(new Date(y,m,d)),c=(evs[k]||0)+(k===tk?sched.length:0);
+    h+='<button class="day'+(k===tk?' today':'')+(k===csel?' sel':'')+'" data-k="'+k+'">'+d+(c?'<u></u>':'')+'</button>';
+  }
+  $('#cal').innerHTML=h;
+}
+$('#cal').onclick=e=>{
+  const k=e.target.dataset&&e.target.dataset.k;if(!k)return;
+  csel=k;const t=k===key(new Date()),c=t?sched.length:(evs[k]||0);
+  $('#cinfo').textContent=new Date(k+'T00:00').toLocaleDateString([],{weekday:'short',day:'numeric',month:'short'})+': '+(c?c+' event'+(c>1?'s':''):'nothing booked');
+  dC();
+};
+$('#cprev').onclick=()=>{cm.setMonth(cm.getMonth()-1);dC()};
+$('#cnext').onclick=()=>{cm.setMonth(cm.getMonth()+1);dC()};
+dC();
+</script>
+</body>
+</html>
+
