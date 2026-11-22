@@ -43,20 +43,22 @@ class ScheduleItem(models.Model):
 class Reminder(models.Model):
     time = models.CharField(max_length=10) # e.g. "18:00"
     text = models.CharField(max_length=255)
+    date = models.DateField(default=timezone.now)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['time']
+        ordering = ['date', 'time']
 
     def __str__(self):
-        return f"{self.time} - {self.text}"
+        return f"{self.date} {self.time} - {self.text}"
 
     def to_dict(self):
         return {
             'id': self.id,
             'time': self.time,
             'text': self.text,
+            'date': self.date.strftime('%Y-%m-%d') if self.date else '',
             'is_active': self.is_active
         }
 
@@ -102,3 +104,87 @@ class DailyPlan(models.Model):
             'activity': self.activity,
             'text': f"{self.time} {self.activity}"
         }
+
+
+class AgentMemory(models.Model):
+    """
+    Claude Autonomous Agent Long-Term Memory:
+    Retains user preferences, contacts, factual context, and learned tasks.
+    """
+    category = models.CharField(max_length=50, default='general') # 'preference', 'fact', 'contact', 'workflow'
+    content = models.TextField()
+    source = models.CharField(max_length=100, default='conversation')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"[{self.category}] {self.content[:40]}"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'category': self.category,
+            'content': self.content,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M')
+        }
+
+
+class AgentTaskExecution(models.Model):
+    """
+    Claude Autonomous Agent Task Execution Ledger:
+    Tracks complex multi-step goals assigned to the agent.
+    """
+    goal = models.CharField(max_length=255)
+    status = models.CharField(max_length=50, default='in_progress') # 'in_progress', 'needs_approval', 'completed'
+    steps = models.JSONField(default=list)
+    summary = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.goal} ({self.status})"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'goal': self.goal,
+            'status': self.status,
+            'steps': self.steps,
+            'summary': self.summary,
+            'created_at': self.created_at.strftime('%H:%M')
+        }
+
+
+class SearchHistory(models.Model):
+    query = models.CharField(max_length=255)
+    category = models.CharField(max_length=50, default='web')
+    result_summary = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.category}: {self.query}"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'query': self.query,
+            'category': self.category,
+            'result': self.result_summary,
+            'time': self.created_at.strftime('%H:%M')
+        }
+
+
+class SystemSetting(models.Model):
+    key = models.CharField(max_length=50, unique=True)
+    value = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.key}={self.value}"

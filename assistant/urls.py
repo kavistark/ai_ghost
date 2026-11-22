@@ -9,5 +9,8 @@ urlpatterns = [
     path('api/messages/', views.api_messages, name='api_messages'),
     path('api/plan/', views.api_plan, name='api_plan'),
     path('api/command/', views.api_command, name='api_command'),
+    path('api/agent/run/', views.api_agent_run, name='api_agent_run'),
+    path('api/agent/memories/', views.api_memories, name='api_memories'),
+    path('api/search/', views.api_search, name='api_search'),
+    path('api/settings/', views.api_settings, name='api_settings'),
 ]
-
