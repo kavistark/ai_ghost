@@ -188,3 +188,97 @@ class SystemSetting(models.Model):
 
     def __str__(self):
         return f"{self.key}={self.value}"
+
+
+class CameraReconLog(models.Model):
+    """
+    Autonomous Agent WiFi Action Camera Reconnaissance Log:
+    Stores visual captures, threat evaluations, detections, and tactical sitreps.
+    """
+    source_url = models.CharField(max_length=255, default='wifi_cam')
+    protocol = models.CharField(max_length=50, default='WiFi/RTSP')
+    threat_level = models.CharField(max_length=20, default='CLEAR') # 'CLEAR', 'CAUTION', 'HIGH'
+    sitrep = models.TextField()
+    detections = models.JSONField(default=list)
+    image_data = models.TextField(blank=True, default='') # Base64 thumbnail or annotated frame
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.threat_level}] {self.protocol} - {self.sitrep[:35]}"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'source_url': self.source_url,
+            'protocol': self.protocol,
+            'threat_level': self.threat_level,
+            'sitrep': self.sitrep,
+            'detections': self.detections,
+            'has_image': bool(self.image_data),
+            'time': self.created_at.strftime('%H:%M:%S'),
+            'date': self.created_at.strftime('%Y-%m-%d')
+        }
+
+
+class CallSession(models.Model):
+    """
+    AI Phone Calling System Session Ledger:
+    Tracks inbound and outbound voice calls attended by Ghost AI (e.g. 9092117397).
+    """
+    phone_number = models.CharField(max_length=30, default='9092117397')
+    direction = models.CharField(max_length=20, default='inbound') # 'inbound' | 'outbound'
+    status = models.CharField(max_length=20, default='active') # 'ringing' | 'active' | 'completed'
+    duration_sec = models.IntegerField(default=0)
+    transcript = models.JSONField(default=list) # list of {'speaker': 'Ghost'|'Caller', 'text': '...', 'time': '...'}
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.direction.upper()}] {self.phone_number} ({self.status})"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'phone_number': self.phone_number,
+            'direction': self.direction,
+            'status': self.status,
+            'duration_sec': self.duration_sec,
+            'transcript': self.transcript,
+            'time': self.created_at.strftime('%H:%M'),
+            'date': self.created_at.strftime('%Y-%m-%d')
+        }
+
+
+class SmsLog(models.Model):
+    """
+    SMS Dispatch Ledger for AI Phone Service (e.g. 9092117397):
+    Logs every SMS alert & remembered call message dispatched to the operator.
+    """
+    to_number = models.CharField(max_length=30, default='9092117397')
+    message = models.TextField()
+    status = models.CharField(max_length=30, default='dispatched') # 'sent' | 'dispatched' | 'failed'
+    provider = models.CharField(max_length=40, default='ghost_sms_gateway')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"SMS -> {self.to_number} [{self.status}]: {self.message[:40]}"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'to_number': self.to_number,
+            'message': self.message,
+            'status': self.status,
+            'provider': self.provider,
+            'time': self.created_at.strftime('%H:%M:%S'),
+            'date': self.created_at.strftime('%Y-%m-%d')
+        }
+

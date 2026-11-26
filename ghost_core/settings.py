@@ -30,6 +30,7 @@ SECRET_KEY = 'django-insecure-3no2a1788af*wp06w+r57mixy4sr$p%j-kse*-^x$q6nbr#dqz
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
+CSRF_TRUSTED_ORIGINS = ['https://aitracker.pythonanywhere.com', 'http://127.0.0.1:8000', 'http://localhost:8000']
 
 # Application definition
 INSTALLED_APPS = [

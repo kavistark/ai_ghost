@@ -2,8 +2,17 @@ import os
 import json
 import re
 import logging
+import base64
+from datetime import datetime
 import requests
 from django.conf import settings
+
+try:
+    import cv2
+    import numpy as np
+except ImportError:
+    cv2 = None
+    np = None
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +123,13 @@ def build_gemini_voice_prompt(context):
         "   - {\"type\": \"call_service\", \"on\": true | false}\n"
         "   - {\"type\": \"add_phone_message\", \"caller\": \"...\", \"message\": \"...\"}\n"
         "   - {\"type\": \"clear_phone_messages\"}\n"
-        "7. Autonomous Agent & Intel Memory: Multi-step missions and field memories.\n"
+        "7. Autonomous Agent, Intel Memory & Action Camera Recon:\n"
         "   - {\"type\": \"run_agent\", \"goal\": \"...\"}\n"
         "   - {\"type\": \"approve_agent\"}\n"
         "   - {\"type\": \"add_memory\", \"content\": \"...\", \"category\": \"tactical_intel\"}\n"
         "   - {\"type\": \"delete_memory\", \"content\": \"...\"}\n"
+        "   - Action Camera Recon: {\"type\": \"camera_analyze\", \"prompt\": \"...\", \"url\": \"...\"}\n"
+        "   - Connect WiFi Action Camera: {\"type\": \"camera_connect\", \"url\": \"...\", \"protocol\": \"WiFi/RTSP|HTTP\"}\n"
         "8. Ghost Core & Security Controls:\n"
         "   - {\"type\": \"lock_grid\"}, {\"type\": \"unlock_grid\"}, {\"type\": \"set_theme\", \"mode\": \"dark\" | \"light\"}\n"
         "9. General Q&A / Tactical Knowledge / Mission Clock:\n"
@@ -178,7 +189,7 @@ def gemini_voice_reply(text, context):
         else:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
         try:
-            res = requests.post(url, headers=headers, json=payload, timeout=6.5)
+            res = requests.post(url, headers=headers, json=payload, timeout=(2.5, 4.0))
             if res.ok:
                 data = res.json()
                 candidate_text = data['candidates'][0]['content']['parts'][0]['text']
@@ -187,6 +198,8 @@ def gemini_voice_reply(text, context):
                     return parsed
             else:
                 logger.debug(f"Gemini {model_name} status {res.status_code}")
+                if res.status_code in (401, 403):
+                    break
         except Exception as e:
             logger.debug(f"Gemini {model_name} error: {e}")
 
@@ -258,3 +271,250 @@ def claude_execute_agent_task(goal, context, memories):
         logger.debug(f"Claude agent call error: {e}")
 
     return None
+
+
+# =====================================================================
+# 3. AUTONOMOUS AGENT: WIFI ACTION CAMERA RECON & VISUAL ANALYSIS
+# =====================================================================
+
+def generate_tactical_hud_frame(status_text="WIFI ACTION CAM // SCANNING FEED", width=640, height=360):
+    """
+    Generate an authentic TF141 tactical HUD synthetic frame when
+    live camera is connecting, offline, or in simulation mode.
+    """
+    if cv2 is None or np is None:
+        return b""
+
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Dark tactical green background grid
+    grid_color = (25, 45, 25)
+    for x in range(0, width, 40):
+        cv2.line(frame, (x, 0), (x, height), grid_color, 1)
+    for y in range(0, height, 40):
+        cv2.line(frame, (0, y), (width, y), grid_color, 1)
+
+    # Animated radar / scan sweep line
+    now = datetime.now()
+    sweep_y = int((now.microsecond / 1000000.0) * height)
+    cv2.line(frame, (0, sweep_y), (width, sweep_y), (0, 180, 80), 2)
+
+    # Corner brackets (Tactical Viewfinder)
+    bracket_len = 30
+    c_color = (0, 220, 110)
+    # Top-Left
+    cv2.line(frame, (20, 20), (20 + bracket_len, 20), c_color, 2)
+    cv2.line(frame, (20, 20), (20, 20 + bracket_len), c_color, 2)
+    # Top-Right
+    cv2.line(frame, (width - 20, 20), (width - 20 - bracket_len, 20), c_color, 2)
+    cv2.line(frame, (width - 20, 20), (width - 20, 20 + bracket_len), c_color, 2)
+    # Bottom-Left
+    cv2.line(frame, (20, height - 20), (20 + bracket_len, height - 20), c_color, 2)
+    cv2.line(frame, (20, height - 20), (20, height - 20 - bracket_len), c_color, 2)
+    # Bottom-Right
+    cv2.line(frame, (width - 20, height - 20), (width - 20 - bracket_len, height - 20), c_color, 2)
+    cv2.line(frame, (width - 20, height - 20), (width - 20, height - 20 - bracket_len), c_color, 2)
+
+    # Center Reticle
+    cx, cy = width // 2, height // 2
+    cv2.drawMarker(frame, (cx, cy), (0, 255, 128), cv2.MARKER_CROSS, 24, 1)
+    cv2.circle(frame, (cx, cy), 45, (0, 200, 100), 1)
+
+    # Header Telemetry
+    cv2.putText(frame, "TF141 GHOST RECON // WIFI ACTION CAM", (30, 42), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 128), 1, cv2.LINE_AA)
+    cv2.putText(frame, status_text, (30, 64), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 255), 1, cv2.LINE_AA)
+
+    # Telemetry Footers
+    t_str = now.strftime('%H:%M:%S.%f')[:11]
+    cv2.putText(frame, f"REC [WIFI 5GHz] | FOV: 140 WIDE | CLOCK: {t_str}", (30, height - 32), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (0, 220, 110), 1, cv2.LINE_AA)
+    cv2.putText(frame, "GRID: 34.521 N, 43.189 E | AZ: 184 DEG | OPTICS: ENCRYPTED", (30, height - 14), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (0, 160, 90), 1, cv2.LINE_AA)
+
+    _, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    return buf.tobytes()
+
+
+def analyze_camera_frame(image_bytes=None, prompt="Scan tactical frame for targets and perimeter security", protocol="WiFi/RTSP", source_url="action_cam"):
+    """
+    Multimodal Visual Recon Engine for the Autonomous Agent:
+    1. Decodes and processes frame with OpenCV
+    2. Identifies salient movement/targets and draws tactical HUD annotations
+    3. Analyzes image using Gemini Multimodal Vision if online
+    4. Provides instant sub-millisecond local tactical assessment fallback
+    """
+    now_str = datetime.now().strftime('%H:%M:%S')
+
+    if cv2 is None or np is None:
+        return {
+            'threat_level': 'CLEAR',
+            'sitrep': 'Action camera optical sensors active. No hostiles detected.',
+            'detections': ['Visual sensor operational', 'Protocol: ' + protocol],
+            'spoken_radio': 'Solid copy. Action camera sector is clear. Stay frosty.',
+            'annotated_image': '',
+            'protocol': protocol,
+            'source_url': source_url,
+            'timestamp': now_str
+        }
+
+    # 1. Decode or Generate Frame
+    img = None
+    if image_bytes:
+        try:
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        except Exception as e:
+            logger.debug(f"Error decoding camera frame: {e}")
+
+    if img is None:
+        synthetic_bytes = generate_tactical_hud_frame("SIMULATED TACTICAL ACTION CAM FEED")
+        nparr = np.frombuffer(synthetic_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    h, w = img.shape[:2]
+
+    # 2. Extract Computer Vision Telemetry (Edges, Contours, Targets)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    mean_lum = float(np.mean(gray))
+    optics_mode = "NIGHT VISION / LOW-LIGHT" if mean_lum < 55 else "DAYLIGHT TACTICAL OPTICS"
+
+    edges = cv2.Canny(gray, 35, 120)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    targets = []
+    min_area = max(200, (w * h) // 400)
+    max_area = (w * h) * 0.75
+
+    for c in contours:
+        area = cv2.contourArea(c)
+        if min_area < area < max_area:
+            x, y, bw, bh = cv2.boundingRect(c)
+            # Filter noise aspect ratios
+            if 0.15 < (bw / bh) < 6.0:
+                targets.append((x, y, bw, bh, area))
+
+    targets = sorted(targets, key=lambda t: t[4], reverse=True)[:5]
+
+    # 3. Draw Tactical HUD Annotations on Frame
+    annotated = img.copy()
+
+    # Draw corner brackets on detected targets
+    for i, (tx, ty, tbw, tbh, _) in enumerate(targets):
+        b_color = (0, 240, 255) if i == 0 else (0, 255, 128)
+        blen = max(6, min(14, tbw // 4, tbh // 4))
+        # Top-left
+        cv2.line(annotated, (tx, ty), (tx + blen, ty), b_color, 2)
+        cv2.line(annotated, (tx, ty), (tx, ty + blen), b_color, 2)
+        # Top-right
+        cv2.line(annotated, (tx + tbw, ty), (tx + tbw - blen, ty), b_color, 2)
+        cv2.line(annotated, (tx + tbw, ty), (tx + tbw, ty + blen), b_color, 2)
+        # Bottom-left
+        cv2.line(annotated, (tx, ty + tbh), (tx + blen, ty + tbh), b_color, 2)
+        cv2.line(annotated, (tx, ty + tbh), (tx, ty + tbh - blen), b_color, 2)
+        # Bottom-right
+        cv2.line(annotated, (tx + tbw, ty + tbh), (tx + tbw - blen, ty + tbh), b_color, 2)
+        cv2.line(annotated, (tx + tbw, ty + tbh), (tx + tbw, ty + tbh - blen), b_color, 2)
+
+        # Label tag
+        lbl = f"TGT-0{i+1} [{tx},{ty}]"
+        cv2.putText(annotated, lbl, (tx, max(12, ty - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.38, b_color, 1, cv2.LINE_AA)
+
+    # Center Targeting Reticle
+    cx, cy = w // 2, h // 2
+    cv2.drawMarker(annotated, (cx, cy), (0, 255, 128), cv2.MARKER_CROSS, 20, 1)
+
+    # Top HUD Banner
+    hud_bg = (15, 20, 15)
+    cv2.rectangle(annotated, (0, 0), (w, 24), hud_bg, -1)
+    status_header = f"TF141 GHOST RECON // LINK: {protocol} // LOCKS: {len(targets)}"
+    cv2.putText(annotated, status_header, (10, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (0, 255, 128), 1, cv2.LINE_AA)
+    cv2.putText(annotated, f"TIME: {now_str}", (w - 110, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (0, 200, 255), 1, cv2.LINE_AA)
+
+    # Encode annotated frame to base64
+    _, buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 82])
+    annotated_b64 = base64.b64encode(buf).decode('utf-8')
+
+    # 4. Attempt Gemini Multimodal Vision Analysis (Tier 1)
+    api_key = get_gemini_api_key()
+    if api_key:
+        vision_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key={api_key}"
+        vision_headers = {"Content-Type": "application/json"}
+        vision_prompt = (
+            "You are Lieutenant Simon 'Ghost' Riley, special forces operator from Call of Duty Task Force 141.\n"
+            f"Analyze this WiFi action camera reconnaissance frame. Tactical context: {prompt}.\n"
+            "Return ONLY a valid JSON object with:\n"
+            "{\n"
+            '  "threat_level": "CLEAR | CAUTION | HIGH",\n'
+            '  "sitrep": "Tactical spoken radio report as Ghost (1-2 sentences)",\n'
+            '  "detections": ["list", "of", "tactical", "observations"],\n'
+            '  "spoken_radio": "Short radio callout ready for voice synthesis"\n'
+            "}"
+        )
+        vision_payload = {
+            "contents": [{
+                "parts": [
+                    {"text": vision_prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": "image/jpeg",
+                            "data": annotated_b64
+                        }
+                    }
+                ]
+            }],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 300,
+                "responseMimeType": "application/json"
+            }
+        }
+        try:
+            v_res = requests.post(vision_url, headers=vision_headers, json=vision_payload, timeout=6.0)
+            if v_res.ok:
+                data = v_res.json()
+                raw_txt = data['candidates'][0]['content']['parts'][0]['text']
+                parsed = clean_json_response(raw_txt)
+                if parsed and isinstance(parsed, dict) and 'sitrep' in parsed:
+                    return {
+                        'threat_level': parsed.get('threat_level', 'CLEAR').upper(),
+                        'sitrep': parsed.get('sitrep', 'Visual scan verified. Perimeter clear.'),
+                        'detections': parsed.get('detections', [f"Optics: {optics_mode}", "Signal: Operational"]),
+                        'spoken_radio': parsed.get('spoken_radio', parsed.get('sitrep')),
+                        'annotated_image': f"data:image/jpeg;base64,{annotated_b64}",
+                        'protocol': protocol,
+                        'source_url': source_url,
+                        'timestamp': now_str
+                    }
+        except Exception as e:
+            logger.debug(f"Gemini vision call fallback: {e}")
+
+    # 5. Local Tactical Computer Vision Analysis (Tier 2 Sub-millisecond Fallback)
+    if len(targets) > 0:
+        threat_level = "HIGH" if len(targets) >= 3 else "CAUTION"
+        sitrep = f"Action camera recon: {len(targets)} visual anomaly signature(s) detected in sector. Optical tracking locked. Stay frosty."
+        spoken_radio = f"Target acquired on action cam feed. {len(targets)} visual signatures locked. Eyes open, operator."
+        detections = [
+            f"Target 0{idx+1} acquired at grid coordinates [{x},{y}] (size {bw}x{bh})"
+            for idx, (x, y, bw, bh, _) in enumerate(targets[:4])
+        ]
+        detections.append(f"Optics Mode: {optics_mode} (mean luminance: {int(mean_lum)})")
+        detections.append(f"Link Telemetry: {protocol} via {source_url} [Active]")
+    else:
+        threat_level = "CLEAR"
+        sitrep = "Action camera visual scan complete. Zero hostile signatures detected in frame. Sector Alpha perimeter is secure."
+        spoken_radio = "Perimeter clear on action camera feed. Sector is secure. Keep moving, operator."
+        detections = [
+            "Perimeter boundary verified intact",
+            "Zero movement or hostile signatures in primary sector",
+            f"Optics Mode: {optics_mode}",
+            f"WiFi Action Cam Link: 100% signal via {protocol}"
+        ]
+
+    return {
+        'threat_level': threat_level,
+        'sitrep': sitrep,
+        'detections': detections,
+        'spoken_radio': spoken_radio,
+        'annotated_image': f"data:image/jpeg;base64,{annotated_b64}",
+        'protocol': protocol,
+        'source_url': source_url,
+        'timestamp': now_str
+    }

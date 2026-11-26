@@ -293,6 +293,29 @@ select.inp option{background:#06141f;color:#d4f6ff}
   </div>
   <div class="pb">
     <div class="mute" id="cst" style="margin-bottom:5px">Answering calls and taking messages.</div>
+    <!-- Live AI Calling System (9092117397) -->
+    <div style="margin-bottom:8px;padding:7px;background:rgba(0,255,128,.04);border:1px solid rgba(0,255,128,.18);border-radius:6px">
+      <div class="row" style="gap:4px;margin-top:0">
+        <input class="inp" id="call-num" value="9092117397" placeholder="Phone number (e.g. 9092117397)" style="font-size:11px;padding:5px 8px;font-weight:700;letter-spacing:.05em">
+        <button class="btn" id="call-dial" style="font-size:10px;padding:5px 9px;border-color:var(--a2);color:var(--a2)">Call</button>
+        <button class="btn" id="call-in" style="font-size:10px;padding:5px 8px">Incoming</button>
+      </div>
+      <!-- Active Call HUD -->
+      <div id="call-active-ui" style="display:none;margin-top:7px;padding-top:7px;border-top:1px solid var(--ln)">
+        <div class="row" style="justify-content:space-between;margin-top:0;margin-bottom:4px">
+          <span id="call-status-lbl" style="font-size:10px;font-weight:700;color:var(--a2)">● RINGING: 9092117397</span>
+          <span id="call-timer" style="font-size:10px;font-family:monospace;color:var(--a)">00:00</span>
+        </div>
+        <div id="call-transcript" style="max-height:78px;overflow-y:auto;font-size:10px;line-height:1.35;margin-bottom:6px;padding:4px;background:rgba(0,0,0,.28);border-radius:4px"></div>
+        <div class="row" style="gap:4px;margin-top:0">
+          <input class="inp" id="call-say-inp" placeholder="Speak or type on call..." style="font-size:10px;padding:4px 7px">
+          <button class="btn" id="call-say-btn" style="font-size:10px;padding:4px 8px">Talk</button>
+          <button class="btn" id="call-end" style="font-size:10px;padding:4px 8px;border-color:var(--warm);color:var(--warm)">End</button>
+        </div>
+      </div>
+      <!-- Dispatched SMS Notification Box -->
+      <div id="sms-box" style="display:none;margin-top:6px;padding:5px 7px;background:rgba(0,220,255,.07);border:1px solid rgba(0,220,255,.3);border-radius:4px;font-size:10px;line-height:1.35"></div>
+    </div>
     <div id="msgs"></div>
     <div class="row" style="margin-top:6px">
       <button class="btn" id="sim">Simulate call</button>
@@ -361,6 +384,46 @@ select.inp option{background:#06141f;color:#d4f6ff}
     <div class="row" style="justify-content:space-between;margin-top:6px">
       <span class="mute" style="font-size:11px" id="mem-badge">Intel vault: 0</span>
       <button class="btn" id="ag-approve" style="font-size:10px;display:none;border-color:var(--a2);color:var(--a2)">Authorize</button>
+    </div>
+
+    <!-- WiFi Protocol Action Camera Visual Recon -->
+    <div style="margin-top:12px;border-top:1px solid var(--ln);padding-top:10px">
+      <div class="row" style="justify-content:space-between;margin-top:0;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--a);text-transform:uppercase">
+          WiFi Action Cam Recon
+        </span>
+        <span class="tag" id="cam-status" style="font-size:10px;border-color:var(--mute);color:var(--mute)">Offline</span>
+      </div>
+      <div class="row" style="gap:4px;margin-top:0">
+        <select class="inp" id="cam-proto" style="width:120px;font-size:11px;padding:6px">
+          <option value="WiFi/HTTP">WiFi HTTP/MJPEG</option>
+          <option value="RTSP">WiFi RTSP Stream</option>
+          <option value="WiFi Direct">Action Cam Direct</option>
+          <option value="WebCam">Local / USB Cam</option>
+          <option value="Tactical Sim">Recon HUD Sim</option>
+        </select>
+        <input class="inp" id="cam-url" placeholder="http://192.168.1.100:8080/video or rtsp://..." value="http://192.168.1.100:8080/video" style="font-size:11px;padding:6px">
+      </div>
+      <div class="row" style="gap:4px;margin-top:6px">
+        <button class="btn" id="cam-connect" style="flex:1;font-size:10px;padding:5px 8px">Connect Cam</button>
+        <button class="btn" id="cam-analyze" style="flex:1;font-size:10px;padding:5px 8px;border-color:var(--a2);color:var(--a2)">Snap &amp; Analyze</button>
+        <button class="btn" id="cam-auto" style="font-size:10px;padding:5px 8px">Auto: OFF</button>
+      </div>
+      <!-- Tactical Viewfinder -->
+      <div id="cam-viewport" style="position:relative;margin-top:8px;background:#050b07;border:1px solid rgba(0,255,128,.22);border-radius:6px;overflow:hidden;height:155px;display:flex;align-items:center;justify-content:center">
+        <img id="cam-stream-img" style="width:100%;height:100%;object-fit:cover;display:none" alt="Action Cam Stream"/>
+        <video id="cam-local-vid" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;display:none"></video>
+        <div id="cam-placeholder" class="mute" style="font-size:11px;text-align:center;padding:12px">
+          <div style="color:var(--a);margin-bottom:4px">[ OPTICS STANDBY ]</div>
+          Select WiFi Protocol &amp; Connect Action Camera
+        </div>
+        <div id="cam-hud-overlay" style="position:absolute;top:6px;left:8px;right:8px;display:flex;justify-content:space-between;pointer-events:none;font-size:9px;font-family:monospace;color:#00ff80;text-shadow:0 0 4px #000">
+          <span id="cam-hud-proto">WIFI 5GHz // STANDBY</span>
+          <span id="cam-threat-badge" style="padding:1px 5px;border-radius:3px;background:rgba(0,0,0,.6);border:1px solid #00ff80">CLEAR</span>
+        </div>
+      </div>
+      <!-- Camera Analysis Sitrep Box -->
+      <div id="cam-sitrep" class="res" style="display:none;margin-top:6px;font-size:11px;line-height:1.4"></div>
     </div>
   </div>
 </section>
@@ -652,6 +715,16 @@ async function handle(text){
       $('#orb').style.filter = 'drop-shadow(0 0 25px var(--warm))';
       setTimeout(() => { if (isLocked) $('#orb').style.filter = 'none'; }, 900);
       say("Negative, operator. Code word invalid. Access denied. State the security code word to gain clearance.");
+    }
+    return;
+  }
+
+  if (typeof callActive !== 'undefined' && callActive) {
+    $('#heard').textContent = 'Call Audio: ' + raw;
+    if (/^(?:end call|hang up|disconnect|stop call)$/i.test(raw)) {
+      endLiveCall();
+    } else {
+      sendCallSpeech(raw);
     }
     return;
   }
@@ -1188,6 +1261,139 @@ $('#cclear').onclick=async()=>{
   }catch(e){}
 };
 
+/* Live AI Calling System (9092117397) */
+let activeCallSessionId=null, callTimerInt=null, callSeconds=0, callActive=false;
+
+function playRingtone(){
+  try{
+    initAudio();
+    tone(440,0.22,'sine',0.08,0);tone(480,0.22,'sine',0.08,0);
+    tone(440,0.22,'sine',0.08,0.35);tone(480,0.22,'sine',0.08,0.35);
+  }catch(e){}
+}
+
+function renderCallTranscript(list){
+  const el=$('#call-transcript');
+  if(!el)return;
+  el.innerHTML=(list||[]).map(t=>`<div><b style="color:${t.speaker==='Ghost'?'var(--a)':'var(--a2)'}">${t.speaker}:</b> ${t.text}</div>`).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+function fmtCallTime(s){
+  const m=String(Math.floor(s/60)).padStart(2,'0'), sec=String(s%60).padStart(2,'0');
+  return `${m}:${sec}`;
+}
+
+async function startLiveCall(num, direction='outbound'){
+  const target=(num||$('#call-num').value||'9092117397').trim();
+  $('#call-num').value=target;
+  $('#call-active-ui').style.display='block';
+  $('#call-status-lbl').textContent=`● RINGING ${direction.toUpperCase()}: ${target}...`;
+  $('#call-status-lbl').style.color='#ffb700';
+  $('#call-timer').textContent='00:00';
+  callSeconds=0;
+  callActive=true;
+  playRingtone();
+
+  setTimeout(async()=>{
+    if(!callActive)return;
+    try{
+      const res=await fetch('/api/phone/call/start/',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({phone_number:target,direction:direction})
+      });
+      if(res.ok){
+        const data=await res.json();
+        activeCallSessionId=data.session_id;
+        if(data.access_granted && typeof isLocked!=='undefined' && isLocked){
+          unlockGrid(true);
+        }
+        $('#call-status-lbl').textContent=`● CONNECTED: ${target} (ACCESS GRANTED)`;
+        $('#call-status-lbl').style.color='var(--a2)';
+        renderCallTranscript(data.transcript);
+        say(data.greeting);
+        if(callTimerInt)clearInterval(callTimerInt);
+        callTimerInt=setInterval(()=>{
+          callSeconds++;
+          $('#call-timer').textContent=fmtCallTime(callSeconds);
+        },1000);
+      }
+    }catch(e){
+      console.warn('Call start error', e);
+    }
+  },1200);
+}
+
+function showSmsAlert(sms){
+  if(!sms)return;
+  const box=$('#sms-box');
+  if(!box)return;
+  box.style.display='block';
+  box.innerHTML=`<b style="color:var(--a)">SMS &rarr; ${sms.to_number} [${sms.status.toUpperCase()}]:</b> ${sms.message} <span class="mute">(${sms.time})</span>`;
+  hit('#sms-box');
+}
+
+async function sendCallSpeech(text){
+  const msg=(text||$('#call-say-inp').value||'').trim();
+  if(!msg||!callActive)return;
+  $('#call-say-inp').value='';
+  const target=$('#call-num').value.trim()||'9092117397';
+  try{
+    const res=await fetch('/api/phone/call/talk/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({session_id:activeCallSessionId,text:msg,phone_number:target})
+    });
+    if(res.ok){
+      const data=await res.json();
+      activeCallSessionId=data.session_id;
+      renderCallTranscript(data.transcript);
+      if(data.memory_saved){
+        memCount++;
+        $('#mem-badge').textContent=`Intel vault: ${memCount} memories`;
+        hit('#mem-badge');
+      }
+      if(data.sms_sent)showSmsAlert(data.sms_sent);
+      if(data.reply)say(data.reply);
+      (data.actions||[]).forEach(a=>{try{A[a.type]&&A[a.type](a)}catch(e){}});
+    }
+  }catch(e){
+    console.warn('Call talk error', e);
+  }
+}
+
+async function endLiveCall(){
+  if(!callActive)return;
+  callActive=false;
+  if(callTimerInt){clearInterval(callTimerInt);callTimerInt=null;}
+  try{
+    const res=await fetch('/api/phone/call/end/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({session_id:activeCallSessionId,duration_sec:callSeconds})
+    });
+    if(res.ok){
+      const data=await res.json();
+      if(data.message_item){
+        phoneMessages.unshift(data.message_item);
+        dM();hit('#msgs');
+      }
+      if(data.sms_sent)showSmsAlert(data.sms_sent);
+    }
+  }catch(e){}
+  activeCallSessionId=null;
+  $('#call-active-ui').style.display='none';
+  play('off');
+  say('Call disconnected. Transcript logged.');
+}
+
+$('#call-dial').onclick=()=>startLiveCall($('#call-num').value,'outbound');
+$('#call-in').onclick=()=>startLiveCall($('#call-num').value,'inbound');
+$('#call-say-btn').onclick=()=>sendCallSpeech();
+$('#call-say-inp').onkeydown=e=>{if(e.key==='Enter')sendCallSpeech();};
+$('#call-end').onclick=endLiveCall;
+
 /* =====================================================================
    8. COMMUNICATE
    ===================================================================== */
@@ -1273,6 +1479,160 @@ $('#ag-approve').onclick=()=>{
   $('#agst').textContent='Authorized';
   $('#ag-approve').style.display='none';
   say('Agent directive authorized. Mission executing.');
+};
+
+/* =====================================================================
+   9B. WIFI ACTION CAMERA VISUAL RECON & ANALYSIS
+   ===================================================================== */
+let camConnected=false, camAutoTimer=null, camLocalStream=null;
+
+function updateCamUI(connected, label){
+  camConnected=connected;
+  const st=$('#cam-status'), btn=$('#cam-connect'), ph=$('#cam-placeholder');
+  if(connected){
+    st.textContent=label||'Connected';
+    st.style.borderColor='var(--a2)';st.style.color='var(--a2)';
+    btn.textContent='Disconnect';
+    if(ph)ph.style.display='none';
+  }else{
+    st.textContent='Offline';
+    st.style.borderColor='var(--mute)';st.style.color='var(--mute)';
+    btn.textContent='Connect Cam';
+    $('#cam-stream-img').style.display='none';
+    $('#cam-stream-img').src='';
+    $('#cam-local-vid').style.display='none';
+    if(camLocalStream){
+      camLocalStream.getTracks().forEach(t=>t.stop());
+      camLocalStream=null;
+    }
+    if(ph)ph.style.display='block';
+    $('#cam-hud-proto').textContent='WIFI 5GHz // STANDBY';
+  }
+}
+
+async function connectActionCam(){
+  if(camConnected){
+    updateCamUI(false);
+    if(camAutoTimer){clearInterval(camAutoTimer);camAutoTimer=null;$('#cam-auto').textContent='Auto: OFF';}
+    return;
+  }
+  const proto=$('#cam-proto').value;
+  const url=$('#cam-url').value.trim();
+  $('#cam-hud-proto').textContent=`${proto.toUpperCase()} // LINK ACTIVE`;
+
+  if(proto==='WebCam'){
+    try{
+      camLocalStream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+      const vid=$('#cam-local-vid');
+      vid.srcObject=camLocalStream;
+      vid.style.display='block';
+      $('#cam-stream-img').style.display='none';
+      updateCamUI(true,'Local Cam Live');
+      play('on');
+    }catch(e){
+      // Fallback to tactical sim stream if browser camera permission denied
+      const img=$('#cam-stream-img');
+      img.src=`/api/camera/stream/?url=sim&protocol=${encodeURIComponent(proto)}&t=${Date.now()}`;
+      img.style.display='block';
+      updateCamUI(true,'HUD Sim Active');
+    }
+  }else{
+    const targetUrl=proto==='Tactical Sim'?'sim':url;
+    const img=$('#cam-stream-img');
+    img.src=`/api/camera/stream/?url=${encodeURIComponent(targetUrl)}&protocol=${encodeURIComponent(proto)}&t=${Date.now()}`;
+    img.style.display='block';
+    $('#cam-local-vid').style.display='none';
+    updateCamUI(true,proto);
+    play('on');
+  }
+}
+
+function renderCameraAnalysis(res){
+  if(!res)return;
+  const sit=$('#cam-sitrep'), badge=$('#cam-threat-badge'), l=$('#alog');
+  const lvl=(res.threat_level||'CLEAR').toUpperCase();
+  badge.textContent=lvl;
+  if(lvl==='HIGH'){
+    badge.style.borderColor='var(--warm)';badge.style.color='var(--warm)';
+  }else if(lvl==='CAUTION'){
+    badge.style.borderColor='#ffb700';badge.style.color='#ffb700';
+  }else{
+    badge.style.borderColor='#00ff80';badge.style.color='#00ff80';
+  }
+  if(res.annotated_image){
+    const img=$('#cam-stream-img');
+    img.src=res.annotated_image;
+    img.style.display='block';
+    $('#cam-local-vid').style.display='none';
+    $('#cam-placeholder').style.display='none';
+  }
+  const dets=(res.detections||[]).map(d=>`<li>${d}</li>`).join('');
+  sit.innerHTML=`<strong>[${lvl}]</strong> ${res.sitrep||''}<ul style="margin:4px 0 0 14px;padding:0;font-size:10px;opacity:.9">${dets}</ul>`;
+  sit.style.display='block';
+
+  const li=E('li',`<span class="time">${res.timestamp||tm()}</span><span>Cam Recon [${lvl}]: ${res.sitrep}</span>`);
+  l.prepend(li);
+  hit('#cam-viewport');
+}
+
+async function analyzeActionCam(silent=false){
+  const proto=$('#cam-proto').value;
+  const url=$('#cam-url').value.trim();
+  const btn=$('#cam-analyze');
+  btn.textContent='Scanning...';
+  $('#agst').textContent='Scanning Cam';
+
+  let imgB64='';
+  if(proto==='WebCam'&&camLocalStream){
+    try{
+      const vid=$('#cam-local-vid');
+      const canvas=document.createElement('canvas');
+      canvas.width=vid.videoWidth||640;
+      canvas.height=vid.videoHeight||360;
+      canvas.getContext('2d').drawImage(vid,0,0,canvas.width,canvas.height);
+      imgB64=canvas.toDataURL('image/jpeg',0.85);
+    }catch(e){}
+  }
+
+  try{
+    const res=await fetch('/api/camera/analyze/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        image:imgB64,
+        url:proto==='Tactical Sim'?'sim':url,
+        protocol:proto,
+        prompt:'Scan tactical frame for hostiles, anomalies, and perimeter clearance'
+      })
+    });
+    if(res.ok){
+      const data=await res.json();
+      renderCameraAnalysis(data);
+      $('#agst').textContent='Recon Complete';
+      if(!silent && data.spoken_radio) say(data.spoken_radio);
+    }
+  }catch(e){
+    console.warn('Camera analyze error', e);
+  }finally{
+    btn.textContent='Snap & Analyze';
+  }
+}
+
+$('#cam-connect').onclick=connectActionCam;
+$('#cam-analyze').onclick=()=>analyzeActionCam(false);
+$('#cam-auto').onclick=()=>{
+  if(camAutoTimer){
+    clearInterval(camAutoTimer);
+    camAutoTimer=null;
+    $('#cam-auto').textContent='Auto: OFF';
+    $('#cam-auto').style.borderColor='var(--ln)';
+  }else{
+    if(!camConnected) connectActionCam();
+    analyzeActionCam(false);
+    camAutoTimer=setInterval(()=>analyzeActionCam(true), 8000);
+    $('#cam-auto').textContent='Auto: ON (8s)';
+    $('#cam-auto').style.borderColor='var(--a2)';
+  }
 };
 
 /* =====================================================================
@@ -1396,6 +1756,10 @@ const A={
     phoneMessages=[];
     dM();hit('#msgs');
   },
+  start_phone_call:a=>{
+    startLiveCall(a.phone_number||'9092117397', a.direction||'outbound');
+    hit('#call-num');
+  },
   run_agent:a=>{runAgent(a.goal,a.steps);hit('#alog');},
   approve_agent:a=>{
     $('#agst').textContent='Authorized';
@@ -1411,6 +1775,22 @@ const A={
     if(memCount>0)memCount--;
     $('#mem-badge').textContent=`Intel vault: ${memCount} memories`;
     hit('#mem-badge');
+  },
+  camera_analyze:a=>{
+    if(a.url)$('#cam-url').value=a.url;
+    if(a.protocol)$('#cam-proto').value=a.protocol;
+    if(a.result){
+      renderCameraAnalysis(a.result);
+    }else{
+      analyzeActionCam(true);
+    }
+    hit('#cam-viewport');
+  },
+  camera_connect:a=>{
+    if(a.url)$('#cam-url').value=a.url;
+    if(a.protocol)$('#cam-proto').value=a.protocol;
+    if(!camConnected)connectActionCam();
+    hit('#cam-viewport');
   },
   unlock_grid:a=>{unlockGrid();},
   lock_grid:a=>{lockGrid();},

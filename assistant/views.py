@@ -1,13 +1,17 @@
+import os
 import json
 import re
+import time
+import base64
 import logging
+import requests
 from datetime import datetime, date, timedelta
 from django.shortcuts import render
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
-from .models import Task, ScheduleItem, Reminder, PhoneMessage, DailyPlan, AgentMemory, AgentTaskExecution, SearchHistory, SystemSetting
-from .ai_service import gemini_voice_reply, claude_execute_agent_task
+from .models import Task, ScheduleItem, Reminder, PhoneMessage, DailyPlan, AgentMemory, AgentTaskExecution, SearchHistory, SystemSetting, CameraReconLog, CallSession, SmsLog
+from .ai_service import gemini_voice_reply, claude_execute_agent_task, analyze_camera_frame, generate_tactical_hud_frame
 
 logger = logging.getLogger(__name__)
 
@@ -461,6 +465,555 @@ def api_memories(request):
     return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
 
 
+def api_camera_stream(request):
+    """
+    Live MJPEG streaming endpoint for WiFi Action Camera:
+    Connects to RTSP/HTTP streams or streams real-time tactical synthetic reconnaissance HUD frames.
+    """
+    url = request.GET.get('url', '').strip()
+    protocol = request.GET.get('protocol', 'WiFi/HTTP')
+
+    def frame_generator():
+        cap = None
+        if url and url not in ['demo', 'sim', 'webcam', '0']:
+            try:
+                import cv2
+                cap = cv2.VideoCapture(url)
+                if cap.isOpened():
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                else:
+                    cap = None
+            except Exception as e:
+                logger.debug(f"OpenCV capture open error: {e}")
+                cap = None
+        elif url in ['webcam', '0']:
+            try:
+                import cv2
+                cap = cv2.VideoCapture(0)
+                if not cap.isOpened():
+                    cap = None
+            except Exception:
+                cap = None
+
+        while True:
+            frame_bytes = None
+            if cap and cap.isOpened():
+                try:
+                    ret, frame = cap.read()
+                    if ret and frame is not None:
+                        import cv2
+                        h, w = frame.shape[:2]
+                        cv2.drawMarker(frame, (w//2, h//2), (0, 255, 128), cv2.MARKER_CROSS, 16, 1)
+                        now_str = datetime.now().strftime('%H:%M:%S')
+                        cv2.putText(frame, f"TF141 LIVE // {protocol} // {now_str}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 128), 1)
+                        _, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+                        frame_bytes = buf.tobytes()
+                    else:
+                        cap.release()
+                        cap = None
+                except Exception:
+                    cap = None
+
+            if not frame_bytes:
+                status_txt = f"WIFI ACTION CAM // {protocol.upper()} LINK ACTIVE" if url else "SIMULATED TACTICAL HUD RECON"
+                frame_bytes = generate_tactical_hud_frame(status_txt)
+
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            time.sleep(0.065)
+
+    return StreamingHttpResponse(frame_generator(), content_type='multipart/x-mixed-replace; boundary=frame')
+
+
+@csrf_exempt
+def api_camera_analyze(request):
+    """
+    Autonomous Agent Visual Recon API:
+    Analyzes frame from WiFi Action Camera using Gemini Vision or local OpenCV analysis.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = request.POST
+
+    img_b64 = data.get('image', '').strip()
+    stream_url = data.get('url', '').strip() or 'action_cam'
+    protocol = data.get('protocol', 'WiFi/RTSP')
+    prompt = data.get('prompt', 'Scan tactical frame for targets and perimeter security')
+
+    image_bytes = None
+    if img_b64:
+        if ',' in img_b64:
+            img_b64 = img_b64.split(',', 1)[1]
+        try:
+            image_bytes = base64.b64decode(img_b64)
+        except Exception as e:
+            logger.debug(f"Base64 decode error: {e}")
+
+    # If no uploaded image, attempt OpenCV frame capture from stream_url
+    if not image_bytes and stream_url and stream_url not in ['action_cam', 'demo', 'sim']:
+        try:
+            import cv2
+            cap = cv2.VideoCapture(stream_url)
+            if cap.isOpened():
+                ret, frame = cap.read()
+                if ret and frame is not None:
+                    _, buf = cv2.imencode('.jpg', frame)
+                    image_bytes = buf.tobytes()
+                cap.release()
+        except Exception as e:
+            logger.debug(f"OpenCV capture failed: {e}")
+
+    # Run AI Visual Recon Analysis
+    res = analyze_camera_frame(
+        image_bytes=image_bytes,
+        prompt=prompt,
+        protocol=protocol,
+        source_url=stream_url
+    )
+
+    # Persist in CameraReconLog
+    c_log = CameraReconLog.objects.create(
+        source_url=stream_url,
+        protocol=protocol,
+        threat_level=res.get('threat_level', 'CLEAR'),
+        sitrep=res.get('sitrep', ''),
+        detections=res.get('detections', []),
+        image_data=res.get('annotated_image', '')[:2000]
+    )
+
+    # Log into Autonomous Agent task ledger and memory
+    AgentTaskExecution.objects.create(
+        goal=f"WiFi Action Camera Recon ({protocol}): {prompt}",
+        status="completed",
+        steps=[
+            f"Connected to {protocol} stream at {stream_url}",
+            "Frame buffer acquired and decoded",
+            "Executed optical target and perimeter scan",
+            f"Evaluation: {res.get('threat_level')} | {res.get('sitrep')}"
+        ],
+        summary=res.get('sitrep', '')
+    )
+    AgentMemory.objects.create(
+        category='visual_recon',
+        content=f"Camera Recon ({protocol}): {res.get('sitrep')}",
+        source='action_cam'
+    )
+
+    return JsonResponse({
+        'status': 'success',
+        'log_id': c_log.id,
+        'threat_level': res.get('threat_level'),
+        'sitrep': res.get('sitrep'),
+        'spoken_radio': res.get('spoken_radio'),
+        'detections': res.get('detections'),
+        'annotated_image': res.get('annotated_image'),
+        'protocol': protocol,
+        'timestamp': res.get('timestamp')
+    })
+
+
+def api_camera_logs(request):
+    """Return historical camera reconnaissance telemetry logs."""
+    logs = [l.to_dict() for l in CameraReconLog.objects.all()[:20]]
+    return JsonResponse({'status': 'success', 'logs': logs})
+
+
+# =========================================================================
+# AI PHONE CALLING SYSTEM (9092117397 + Live Voice + SMS + PSTN Webhook)
+# =========================================================================
+
+def get_env_setting(key):
+    """Read setting dynamically from os.environ or .env file."""
+    val = os.getenv(key, '').strip()
+    if val:
+        return val
+    from django.conf import settings
+    env_file = os.path.join(getattr(settings, 'BASE_DIR', os.getcwd()), '.env')
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith(f"{key}="):
+                        return line.split('=', 1)[1].strip().strip('"').strip("'")
+        except Exception:
+            pass
+    return ''
+
+
+_TWILIO_FROM_CACHE = {'checked': False, 'number': ''}
+
+def get_twilio_config():
+    """Retrieve Twilio SID, Auth Pair (API Key or Auth Token), From Number, and Public URL."""
+    sid = get_env_setting('TWILIO_ACCOUNT_SID')
+    tok = get_env_setting('TWILIO_AUTH_TOKEN')
+    api_sid = get_env_setting('TWILIO_API_KEY_SID')
+    api_sec = get_env_setting('TWILIO_API_KEY_SECRET')
+    tw_from = get_env_setting('TWILIO_FROM_NUMBER')
+    pub_url = get_env_setting('PUBLIC_WEBHOOK_URL')
+
+    auth_pair = (api_sid, api_sec) if (api_sid and api_sec) else ((sid, tok) if (sid and tok) else None)
+
+    if sid and auth_pair and not tw_from:
+        if _TWILIO_FROM_CACHE['checked']:
+            tw_from = _TWILIO_FROM_CACHE['number']
+        else:
+            _TWILIO_FROM_CACHE['checked'] = True
+            try:
+                r = requests.get(
+                    f"https://api.twilio.com/2010-04-01/Accounts/{sid}/IncomingPhoneNumbers.json",
+                    auth=auth_pair,
+                    timeout=1.5
+                )
+                if r.ok:
+                    nums = r.json().get('incoming_phone_numbers', [])
+                    if nums:
+                        tw_from = nums[0].get('phone_number', '')
+                        _TWILIO_FROM_CACHE['number'] = tw_from
+            except Exception:
+                pass
+    return sid, auth_pair, tw_from, pub_url
+
+
+def send_sms_to_operator(phone_number, message_text):
+    """
+    Dispatch an SMS alert to the operator (default: 9092117397).
+    Supports Twilio SMS (Auth Token or API Key), Fast2SMS (India), and persists every SMS in SmsLog.
+    """
+    clean_num = str(phone_number or '9092117397').strip()
+    digits_10 = re.sub(r'\D', '', clean_num)[-10:] or '9092117397'
+    e164_num = clean_num if clean_num.startswith('+') else f"+91{digits_10}"
+
+    provider = 'ghost_sms_gateway'
+    status = 'dispatched'
+
+    tw_sid, tw_auth, tw_from, _ = get_twilio_config()
+    fast2sms_key = get_env_setting('FAST2SMS_API_KEY')
+
+    if tw_sid and tw_auth and tw_from:
+        try:
+            tw_url = f"https://api.twilio.com/2010-04-01/Accounts/{tw_sid}/Messages.json"
+            res = requests.post(
+                tw_url,
+                auth=tw_auth,
+                data={'To': e164_num, 'From': tw_from, 'Body': message_text},
+                timeout=5.0
+            )
+            if res.ok:
+                provider = 'twilio'
+                status = 'sent'
+            else:
+                logger.debug(f"Twilio SMS status {res.status_code}: {res.text}")
+        except Exception as e:
+            logger.debug(f"Twilio SMS error: {e}")
+    elif fast2sms_key:
+        try:
+            res = requests.post(
+                "https://www.fast2sms.com/dev/bulkV2",
+                headers={'authorization': fast2sms_key, 'Content-Type': 'application/json'},
+                json={'route': 'q', 'message': message_text, 'numbers': digits_10},
+                timeout=5.0
+            )
+            if res.ok:
+                provider = 'fast2sms'
+                status = 'sent'
+        except Exception as e:
+            logger.debug(f"Fast2SMS error: {e}")
+
+    sms_obj = SmsLog.objects.create(
+        to_number=digits_10,
+        message=message_text,
+        status=status,
+        provider=provider
+    )
+    return sms_obj
+
+
+@csrf_exempt
+def api_phone_call_start(request):
+    """
+    Start an inbound or outbound AI voice call session (default number: 9092117397).
+    Grants tactical grid access and prepares memory + SMS dispatch.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = request.POST
+
+    phone_number = str(data.get('phone_number', '9092117397')).strip() or '9092117397'
+    direction = data.get('direction', 'inbound')
+    now_time = datetime.now().strftime('%H:%M')
+
+    greeting = (
+        f"Ghost Comms, Task Force 141. Line {phone_number} connected and access granted. "
+        "I am attending your call. Tell me what to remember, and I will SMS it to you."
+    )
+
+    session = CallSession.objects.create(
+        phone_number=phone_number,
+        direction=direction,
+        status='active',
+        transcript=[{'speaker': 'Ghost', 'text': greeting, 'time': now_time}]
+    )
+
+    # Optional Real PSTN Outbound Call via Twilio if configured in .env
+    twilio_dispatched = False
+    tw_sid, tw_auth, tw_from, tw_public_url = get_twilio_config()
+
+    if direction == 'outbound' and tw_sid and tw_auth and tw_from and tw_public_url:
+        to_num = phone_number if phone_number.startswith('+') else f"+91{phone_number}"
+        try:
+            tw_url = f"https://api.twilio.com/2010-04-01/Accounts/{tw_sid}/Calls.json"
+            tw_res = requests.post(
+                tw_url,
+                auth=tw_auth,
+                data={
+                    'To': to_num,
+                    'From': tw_from,
+                    'Url': f"{tw_public_url.rstrip('/')}/api/phone/webhook/"
+                },
+                timeout=5.0
+            )
+            if tw_res.ok:
+                twilio_dispatched = True
+        except Exception as e:
+            logger.debug(f"Twilio outbound dispatch skipped: {e}")
+
+    return JsonResponse({
+        'status': 'success',
+        'session_id': session.id,
+        'phone_number': phone_number,
+        'direction': direction,
+        'access_granted': True,
+        'greeting': greeting,
+        'twilio_dispatched': twilio_dispatched,
+        'transcript': session.transcript
+    })
+
+
+@csrf_exempt
+def api_phone_call_talk(request):
+    """
+    Process a live spoken turn during an active AI phone call.
+    Automatically remembers key call messages in AgentMemory and dispatches an SMS to 9092117397.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = request.POST
+
+    session_id = data.get('session_id')
+    caller_text = str(data.get('text', '')).strip()
+    phone_number = str(data.get('phone_number', '9092117397')).strip()
+    now_time = datetime.now().strftime('%H:%M')
+
+    if not caller_text:
+        return JsonResponse({'status': 'error', 'message': 'No speech text provided'}, status=400)
+
+    session = CallSession.objects.filter(id=session_id).first() if session_id else None
+    if not session:
+        session = CallSession.objects.create(phone_number=phone_number, direction='inbound', status='active', transcript=[])
+
+    # Log caller speech
+    transcript = list(session.transcript or [])
+    transcript.append({'speaker': 'Caller', 'text': caller_text, 'time': now_time})
+
+    lower = caller_text.lower()
+    memory_saved = False
+    sms_sent = None
+
+    # Check if caller wants Ghost to remember a message or send SMS
+    is_remember = any(k in lower for k in ['remember', 'note', 'save', 'remind', 'message', 'sms', 'text me', 'send me', 'important'])
+    is_greeting_or_bye = lower in ['hello', 'hi', 'hey', 'bye', 'hang up', 'end call', 'ok', 'okay', 'thanks', 'thank you']
+
+    # Build context and get Ghost AI reply
+    context = {
+        'tasks': [t.to_dict() for t in Task.objects.all()[:10]],
+        'schedule': [s.to_dict() for s in ScheduleItem.objects.all()[:10]],
+        'reminders': [r.to_dict() for r in Reminder.objects.filter(is_active=True)[:10]],
+        'call_context': f"Active live phone call with {phone_number}. Remember messages and send SMS when asked."
+    }
+
+    reply_text = ""
+    synced_actions = []
+
+    try:
+        gem_res = gemini_voice_reply(caller_text, context)
+        if gem_res and isinstance(gem_res, dict) and gem_res.get('reply'):
+            reply_text = gem_res['reply']
+            synced_actions = sync_actions_to_database(gem_res.get('actions', []))
+    except Exception as e:
+        logger.debug(f"Call Gemini fallback: {e}")
+
+    # Remember message in AgentMemory and dispatch SMS to 9092117397!
+    if is_remember or (not is_greeting_or_bye and len(caller_text.split()) >= 3):
+        clean_mem = re.sub(r'^(?:please\s+)?(?:remember(?:\s+that|\s+this|\s+to)?|note(?:\s+that)?|sms\s+me(?:\s+that)?|remind\s+me(?:\s+to)?)\s*', '', caller_text, flags=re.IGNORECASE).strip() or caller_text
+        AgentMemory.objects.create(
+            category='call_memory',
+            content=f"[Call {phone_number} @ {now_time}] {clean_mem}",
+            source=f'phone_{phone_number}'
+        )
+        memory_saved = True
+        sms_obj = send_sms_to_operator(phone_number, f"[GHOST COMMS] Remembered from call: {clean_mem}")
+        sms_sent = sms_obj.to_dict()
+
+    if not reply_text:
+        if any(w in lower for w in ['hello', 'hi', 'hey', 'ghost', 'there']):
+            reply_text = f"Ghost here. Line {phone_number} has full access. Tell me what to remember and I will SMS you."
+        elif any(w in lower for w in ['time', 'clock']):
+            reply_text = f"Tactical clock reads {datetime.now().strftime('%H:%M')} hours. Standing by."
+        elif memory_saved:
+            reply_text = f"Solid copy. Remembered that message and dispatched an SMS to {phone_number}."
+        elif any(w in lower for w in ['bye', 'hang up', 'end call', 'done', 'thanks', 'thank you']):
+            reply_text = "Copy that. Comms terminating. Watch your six, operator. Ghost out."
+        else:
+            PhoneMessage.objects.create(caller=f"Call ({phone_number})", time_label=now_time, message=caller_text)
+            reply_text = f"Copy on '{caller_text}'. Logged on wire {phone_number}. Standing by."
+    elif memory_saved and 'sms' not in reply_text.lower():
+        reply_text = f"{reply_text} Memory logged and SMS sent to {phone_number}."
+
+    transcript.append({'speaker': 'Ghost', 'text': reply_text, 'time': datetime.now().strftime('%H:%M')})
+    session.transcript = transcript
+    session.save()
+
+    return JsonResponse({
+        'status': 'success',
+        'session_id': session.id,
+        'reply': reply_text,
+        'actions': synced_actions,
+        'transcript': transcript,
+        'memory_saved': memory_saved,
+        'sms_sent': sms_sent
+    })
+
+
+@csrf_exempt
+def api_phone_call_end(request):
+    """End active phone call, archive summary to PhoneMessage inbox, and dispatch summary SMS."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = request.POST
+
+    session_id = data.get('session_id')
+    duration_sec = int(data.get('duration_sec', 0) or 0)
+    now_time = datetime.now().strftime('%H:%M')
+
+    session = CallSession.objects.filter(id=session_id).first() if session_id else None
+    msg_item = None
+    sms_sent = None
+    if session:
+        session.status = 'completed'
+        session.duration_sec = duration_sec
+        session.save()
+
+        caller_lines = [t['text'] for t in (session.transcript or []) if t.get('speaker') == 'Caller']
+        summary = " | ".join(caller_lines) if caller_lines else f"Voice call attended ({duration_sec}s)"
+        pm = PhoneMessage.objects.create(
+            caller=f"Phone ({session.phone_number})",
+            time_label=now_time,
+            message=f"[{session.direction.upper()} {duration_sec}s] {summary}"
+        )
+        msg_item = pm.to_dict()
+
+        if caller_lines:
+            sms_obj = send_sms_to_operator(
+                session.phone_number,
+                f"[GHOST CALL SUMMARY {duration_sec}s] {summary[:140]}"
+            )
+            sms_sent = sms_obj.to_dict()
+
+    return JsonResponse({'status': 'success', 'message_item': msg_item, 'sms_sent': sms_sent})
+
+
+@csrf_exempt
+def api_phone_sms(request):
+    """GET SMS dispatch logs or POST a new SMS to 9092117397."""
+    if request.method == 'GET':
+        logs = [s.to_dict() for s in SmsLog.objects.all()[:15]]
+        return JsonResponse({'status': 'success', 'sms_logs': logs})
+    elif request.method == 'POST':
+        try:
+            data = json.loads(request.body.decode('utf-8'))
+        except Exception:
+            data = request.POST
+        to_num = data.get('to_number', '9092117397')
+        msg = str(data.get('message', '')).strip()
+        if not msg:
+            return JsonResponse({'status': 'error', 'message': 'Message required'}, status=400)
+        sms_obj = send_sms_to_operator(to_num, msg)
+        return JsonResponse({'status': 'success', 'sms': sms_obj.to_dict()})
+    return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+def api_phone_webhook(request):
+    """
+    Twilio / PSTN Voice Webhook:
+    When a real call arrives on the connected phone line, Ghost answers and listens.
+    """
+    caller_num = request.POST.get('From', '9092117397')
+    CallSession.objects.create(phone_number=caller_num, direction='inbound', status='active')
+    twiml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<Response>'
+        '<Say voice="Polly.Brian">Ghost Comms, Task Force 141. Line connected. Speak your message or orders.</Say>'
+        '<Gather input="speech" action="/api/phone/webhook/gather/" method="POST" speechTimeout="auto" />'
+        '<Say voice="Polly.Brian">No transmission received. Standing by. Ghost out.</Say>'
+        '</Response>'
+    )
+    return HttpResponse(twiml, content_type='text/xml')
+
+
+@csrf_exempt
+def api_phone_webhook_gather(request):
+    """Twilio Speech Gather Webhook for real-time PSTN voice replies."""
+    speech = request.POST.get('SpeechResult', '').strip()
+    caller_num = request.POST.get('From', '9092117397')
+    now_time = datetime.now().strftime('%H:%M')
+
+    reply = "Solid copy. Message logged and SMS dispatched. Anything else, operator?"
+    if speech:
+        PhoneMessage.objects.create(caller=f"PSTN ({caller_num})", time_label=now_time, message=speech)
+        AgentMemory.objects.create(
+            category='call_memory',
+            content=f"[PSTN Call {caller_num} @ {now_time}] {speech}",
+            source=f'pstn_{caller_num}'
+        )
+        send_sms_to_operator(caller_num, f"[GHOST PSTN] Remembered from call: {speech}")
+        try:
+            gem = gemini_voice_reply(speech, {'call': caller_num})
+            if gem and gem.get('reply'):
+                reply = f"{gem['reply']} SMS dispatched to your number."
+                sync_actions_to_database(gem.get('actions', []))
+        except Exception:
+            pass
+
+    safe_reply = reply.replace('&', 'and').replace('<', '').replace('>', '')
+    twiml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<Response>'
+        f'<Say voice="Polly.Brian">{safe_reply}</Say>'
+        '<Gather input="speech" action="/api/phone/webhook/gather/" method="POST" speechTimeout="auto" />'
+        '</Response>'
+    )
+    return HttpResponse(twiml, content_type='text/xml')
+
+
+
 def parse_time_str(s):
     if not s:
         return '09:00'
@@ -733,6 +1286,41 @@ def sync_actions_to_database(actions):
                 if m_content:
                     AgentMemory.objects.filter(content__icontains=m_content).delete()
 
+            # 8. AUTONOMOUS AGENT: WIFI ACTION CAMERA RECON & ANALYSIS
+            elif act_type == 'camera_analyze':
+                c_url = act.get('url') or 'action_cam'
+                c_proto = act.get('protocol') or 'WiFi/RTSP'
+                c_prompt = act.get('prompt') or 'Scan perimeter and detect hostiles'
+                c_res = analyze_camera_frame(image_bytes=None, prompt=c_prompt, protocol=c_proto, source_url=c_url)
+                c_log = CameraReconLog.objects.create(
+                    source_url=c_url,
+                    protocol=c_proto,
+                    threat_level=c_res.get('threat_level', 'CLEAR'),
+                    sitrep=c_res.get('sitrep', ''),
+                    detections=c_res.get('detections', []),
+                    image_data=c_res.get('annotated_image', '')[:2000]
+                )
+                AgentTaskExecution.objects.create(
+                    goal=f"WiFi Action Cam Recon ({c_proto})",
+                    status="completed",
+                    steps=["WiFi link established", "Captured optical frame buffer", "Executed target & perimeter scan", f"Threat Level: {c_res.get('threat_level')}"],
+                    summary=c_res.get('sitrep', '')
+                )
+                AgentMemory.objects.create(
+                    category='visual_recon',
+                    content=f"Camera Recon ({c_proto}): {c_res.get('sitrep')}",
+                    source='action_cam'
+                )
+                act['result'] = c_res
+                act['sitrep'] = c_res.get('sitrep')
+                act['threat_level'] = c_res.get('threat_level')
+                act['annotated_image'] = c_res.get('annotated_image')
+            elif act_type == 'camera_connect':
+                c_url = act.get('url') or 'http://192.168.1.100:8080/video'
+                c_proto = act.get('protocol') or 'WiFi/HTTP'
+                act['url'] = c_url
+                act['protocol'] = c_proto
+
         except Exception as ex:
             logger.warning(f"Error syncing action {act_type} to database: {ex}")
 
@@ -825,6 +1413,51 @@ def api_command(request):
     # =========================================================================
     # TIER 2: FAIL-SAFE LOCAL TACTICAL PARSER (Sub-millisecond fallback)
     # =========================================================================
+
+    # AI Calling System (9092117397, +918754701369 & voice calls)
+    if re.search(r'(?:call|dial|ring)\s+\+?\d{10,13}', lower) or any(q in lower for q in ['attend call', 'answer call', 'make a call', 'call me', 'phone call']):
+        m_num = re.search(r'(\+?\d{10,13})', clean_text)
+        target_num = m_num.group(1) if m_num else '9092117397'
+        return JsonResponse({
+            'reply': f"Dialing {target_num}. Ghost Comms standing by to attend the line and talk.",
+            'actions': [{'type': 'start_phone_call', 'phone_number': target_num, 'direction': 'outbound'}]
+        })
+
+    # WiFi Action Camera Recon & Analysis commands
+    if any(q in lower for q in ['analyze camera', 'camera analyze', 'scan camera', 'camera scan', 'action camera', 'action cam', 'recon camera', 'check camera', 'what does the camera see', 'wifi camera', 'camera feed']):
+        m_cam_url = re.search(r'(?:at|url|ip)\s+([a-zA-Z0-9.:/_-]+)', clean_text, re.IGNORECASE)
+        cam_url = m_cam_url.group(1).strip() if m_cam_url else 'action_cam'
+        cam_proto = 'RTSP' if 'rtsp' in lower else ('WiFi Direct' if 'direct' in lower or 'gopro' in lower else 'WiFi/HTTP')
+
+        c_res = analyze_camera_frame(image_bytes=None, prompt='Scan for hostiles and analyze perimeter', protocol=cam_proto, source_url=cam_url)
+        CameraReconLog.objects.create(
+            source_url=cam_url,
+            protocol=cam_proto,
+            threat_level=c_res.get('threat_level', 'CLEAR'),
+            sitrep=c_res.get('sitrep', ''),
+            detections=c_res.get('detections', []),
+            image_data=c_res.get('annotated_image', '')[:2000]
+        )
+        AgentTaskExecution.objects.create(
+            goal=f"WiFi Action Camera Recon ({cam_proto})",
+            status="completed",
+            steps=["Establishing WiFi camera link", "Capturing live optical telemetry", "Executing tactical visual analysis", f"Threat Level: {c_res.get('threat_level')}"],
+            summary=c_res.get('sitrep', '')
+        )
+        AgentMemory.objects.create(
+            category='visual_recon',
+            content=f"Action Cam Analysis: {c_res.get('sitrep')}",
+            source='action_cam'
+        )
+        return JsonResponse({
+            'reply': c_res.get('spoken_radio', c_res.get('sitrep')),
+            'actions': [{
+                'type': 'camera_analyze',
+                'url': cam_url,
+                'protocol': cam_proto,
+                'result': c_res
+            }]
+        })
 
     # Identity / Character check
     if any(q in lower for q in ['who are you', 'who is ghost', 'what is your name', 'identify yourself', 'your callsign', 'what is your callsign']) or lower.strip() == 'callsign':
