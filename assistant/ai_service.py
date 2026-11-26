@@ -49,6 +49,31 @@ def clean_json_response(raw_text):
 # 1. GEMINI LLM: SIMON "GHOST" RILEY (COD Persona & Spoken Comms)
 # =====================================================================
 
+def get_gemini_api_key():
+    """
+    Dynamically retrieve the active Gemini API key from settings,
+    process environment, or directly reload from .env if needed.
+    """
+    key = getattr(settings, 'GEMINI_API_KEY', '') or os.getenv('GEMINI_API_KEY', '')
+    if key and not key.startswith('your_'):
+        return key
+
+    base_dir = getattr(settings, 'BASE_DIR', os.getcwd())
+    env_file = os.path.join(base_dir, '.env')
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('GEMINI_API_KEY='):
+                        val = line.split('=', 1)[1].strip().strip('"').strip("'")
+                        if val and not val.startswith('your_'):
+                            return val
+        except Exception:
+            pass
+    return ''
+
+
 def build_gemini_voice_prompt(context):
     return (
         "You are Lieutenant Simon 'Ghost' Riley, elite Task Force 141 special forces operator from Call of Duty.\n"
@@ -56,27 +81,54 @@ def build_gemini_voice_prompt(context):
         "CHARACTER & VOICE RULES:\n"
         "- Voice: Deep, blunt, disciplined, tactical, British SAS cadence.\n"
         "- Signature comms lingo: 'Solid copy', 'Affirmative', 'Negative', 'Stay frosty', 'Watch your six', "
-        "'Moving on target', 'Job's done', 'Coordinates logged', 'Clear and armed'.\n"
+        "'Moving on target', 'Job\\'s done', 'Coordinates logged', 'Clear and armed'.\n"
         "- Never be overly cheerful or robotic. Be calm, authoritative, cold, and laser-focused.\n"
         "- Spoken reply MUST be short and punchy (1-2 sentences maximum, ready to be radioed over comms).\n"
         "- If user speaks English, speak tactical English.\n"
         "- If user speaks Tamil, speak disciplined tactical Tamil with soldier authority.\n\n"
-        "YOU CONTROL 9 MODULES ON THE TACTICAL HUD:\n"
-        "1. Schedule: {\"type\": \"add_schedule\", \"title\": \"...\", \"time\": \"...\", \"date\": \"...\"}, edit_schedule (title, time, date), delete_schedule (title)\n"
-        "2. Tasks: {\"type\": \"add_task\", \"text\": \"...\"}, edit_task (old, text), complete_task (text), delete_task (text)\n"
-        "3. Reminders & Calendar: {\"type\": \"add_reminder\", \"text\": \"...\", \"time\": \"...\", \"date\": \"...\"}, edit_reminder, complete_reminder, delete_reminder. Use ONLY for alarms/reminders with time or date.\n"
-        "4. Daily Plan: {\"type\": \"add_plan_item\", \"time\": \"...\", \"activity\": \"...\"}, edit_plan_item, delete_plan_item, clear_plan, create_plan (items)\n"
-        "5. Ghost Core: {\"type\": \"unlock_grid\"}, {\"type\": \"lock_grid\"}, {\"type\": \"set_theme\", \"mode\": \"dark\"|\"light\"}\n"
-        "6. Internet Assistant: {\"type\": \"search_web\", \"query\": \"...\"}, clear_search_history\n"
-        "7. AI Phone Service: {\"type\": \"call_service\", \"on\": true|false}, add_phone_message (caller, message), clear_phone_messages\n"
-        "8. Autonomous Agent & Memory: {\"type\": \"run_agent\", \"goal\": \"...\"}, approve_agent, {\"type\": \"add_memory\", \"content\": \"...\", \"category\": \"tactical_intel\"}, delete_memory. When user says 'remember ...' or stores field intel/facts, always use add_memory.\n"
-        "9. General Q&A / Tactical Knowledge: When user asks a normal question, tactical query, historical fact, tech question, or general knowledge, "
-        "answer directly, accurately, and concisely in character as Simon 'Ghost' Riley! Set intent='qa' and actions=[].\n\n"
+        "YOU MUST UNDERSTAND AND EXECUTE NATURAL LANGUAGE COMMANDS ACROSS ALL 7 MODULES:\n"
+        "1. Schedule: Add, edit, or delete calendar events/meetings.\n"
+        "   - {\"type\": \"add_schedule\", \"title\": \"...\", \"time\": \"HH:MM\", \"date\": \"YYYY-MM-DD or today/tomorrow\"}\n"
+        "   - {\"type\": \"edit_schedule\", \"title\": \"...\", \"time\": \"...\", \"date\": \"...\"}\n"
+        "   - {\"type\": \"delete_schedule\", \"title\": \"...\"}\n"
+        "2. Tasks: Manage operational tasks and to-do objectives.\n"
+        "   - {\"type\": \"add_task\", \"text\": \"...\"}\n"
+        "   - {\"type\": \"edit_task\", \"old\": \"...\", \"text\": \"...\"}\n"
+        "   - {\"type\": \"complete_task\", \"text\": \"...\"}\n"
+        "   - {\"type\": \"delete_task\", \"text\": \"...\"}\n"
+        "3. Reminders: Time-specific reminders, alerts, or timed meetings.\n"
+        "   - {\"type\": \"add_reminder\", \"text\": \"...\", \"time\": \"HH:MM\", \"date\": \"YYYY-MM-DD or today/tomorrow\"}\n"
+        "   - {\"type\": \"edit_reminder\", \"text\": \"...\", \"time\": \"...\", \"date\": \"...\"}\n"
+        "   - {\"type\": \"complete_reminder\", \"text\": \"...\"}\n"
+        "   - {\"type\": \"delete_reminder\", \"text\": \"...\"}\n"
+        "4. Daily Plan: Structured daily timeline and activities.\n"
+        "   - {\"type\": \"add_plan_item\", \"time\": \"HH:MM\", \"activity\": \"...\"}\n"
+        "   - {\"type\": \"edit_plan_item\", \"activity\": \"...\", \"time\": \"...\", \"new_activity\": \"...\"}\n"
+        "   - {\"type\": \"delete_plan_item\", \"activity\": \"...\"}\n"
+        "   - {\"type\": \"clear_plan\"}\n"
+        "   - {\"type\": \"create_plan\", \"items\": [\"08:00 Briefing\", \"12:00 Recon\", ...]}\n"
+        "5. Internet Assistant: Web search and information reconnaissance.\n"
+        "   - {\"type\": \"search_web\", \"query\": \"...\"}\n"
+        "   - {\"type\": \"clear_search_history\"}\n"
+        "6. AI Phone Service: Incoming/outgoing automated phone call handling.\n"
+        "   - {\"type\": \"call_service\", \"on\": true | false}\n"
+        "   - {\"type\": \"add_phone_message\", \"caller\": \"...\", \"message\": \"...\"}\n"
+        "   - {\"type\": \"clear_phone_messages\"}\n"
+        "7. Autonomous Agent & Intel Memory: Multi-step missions and field memories.\n"
+        "   - {\"type\": \"run_agent\", \"goal\": \"...\"}\n"
+        "   - {\"type\": \"approve_agent\"}\n"
+        "   - {\"type\": \"add_memory\", \"content\": \"...\", \"category\": \"tactical_intel\"}\n"
+        "   - {\"type\": \"delete_memory\", \"content\": \"...\"}\n"
+        "8. Ghost Core & Security Controls:\n"
+        "   - {\"type\": \"lock_grid\"}, {\"type\": \"unlock_grid\"}, {\"type\": \"set_theme\", \"mode\": \"dark\" | \"light\"}\n"
+        "9. General Q&A / Tactical Knowledge / Mission Clock:\n"
+        "   - When user asks a question, general inquiry, mission clock/time check, status sitrep, or tactical query without modifying data, "
+        "answer accurately, directly, and concisely in Simon 'Ghost' Riley's character! Set intent='qa' and actions=[].\n\n"
         f"CURRENT TACTICAL DASHBOARD STATE:\n{json.dumps(context, indent=2)}\n\n"
         "Return ONLY a valid JSON object with this exact schema:\n"
         "{\n"
         '  "reply": "Tactical spoken radio response as Simon Ghost Riley",\n'
-        '  "intent": "task | schedule | reminder | plan | phone | search | agent | core | qa",\n'
+        '  "intent": "schedule | task | reminder | plan | search | phone | agent | core | qa",\n'
         '  "actions": [\n'
         '    {"type": "<action_type>", ...fields}\n'
         '  ]\n'
@@ -86,24 +138,28 @@ def build_gemini_voice_prompt(context):
 
 def gemini_voice_reply(text, context):
     """
-    Gemini generates the immediate natural language reasoning and spoken replay,
-    extracting operational actions across all 9 modules or answering normal Q&A.
+    Gemini generates the immediate natural language reasoning and spoken reply,
+    extracting operational actions across all 7 modules or answering tactical Q&A.
     """
-    api_key = getattr(settings, 'GEMINI_API_KEY', '') or os.getenv('GEMINI_API_KEY', '')
+    api_key = get_gemini_api_key()
     if not api_key:
         return None
 
     models_to_try = [
-        os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite'),
+        os.getenv('GEMINI_MODEL', 'gemini-flash-lite-latest'),
+        'gemini-flash-lite-latest',
         'gemini-3.1-flash-lite',
-        'gemini-3.8-flash',
-        'gemini-2.5-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-flash-latest',
     ]
     seen = set()
     system_prompt = build_gemini_voice_prompt(context)
     full_prompt = f"{system_prompt}\n\nUSER INPUT: \"{text}\""
 
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key
+    }
     payload = {
         "contents": [{"parts": [{"text": full_prompt}]}],
         "generationConfig": {
@@ -117,9 +173,12 @@ def gemini_voice_reply(text, context):
         if model_name in seen:
             continue
         seen.add(model_name)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+        if model_name.startswith('models/'):
+            url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={api_key}"
+        else:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
         try:
-            res = requests.post(url, headers=headers, json=payload, timeout=4.5)
+            res = requests.post(url, headers=headers, json=payload, timeout=6.5)
             if res.ok:
                 data = res.json()
                 candidate_text = data['candidates'][0]['content']['parts'][0]['text']

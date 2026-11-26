@@ -853,6 +853,72 @@ def api_command(request):
             'actions': []
         })
 
+    # Mission Clock & Date: "what is the time now", "time", "date", etc.
+    if any(q in lower for q in ['what is the time', 'what time', 'the time now', 'time now', 'current time', 'clock', 'tell me the time']) or lower.strip() in ['time', 'what time is it', 'what is the time']:
+        t_24 = now_dt.strftime('%H:%M')
+        t_12 = now_dt.strftime('%I:%M %p').lstrip('0')
+        d_name = now_dt.strftime('%A, %d %B')
+        return JsonResponse({
+            'reply': f"Tactical clock reads {t_24} hours ({t_12}), {d_name}. Stay sharp, operator.",
+            'actions': []
+        })
+
+    if any(q in lower for q in ['what is the date', 'what date', 'today date', "today's date", 'what day is it', 'what day is today']) or lower.strip() in ['date', 'today']:
+        d_full = now_dt.strftime('%A, %d %B %Y')
+        return JsonResponse({
+            'reply': f"Today is {d_full}. Operational grid active. What are your orders?",
+            'actions': []
+        })
+
+    if any(q in lower for q in ['weather', 'forecast', 'climate', 'temperature']):
+        return JsonResponse({
+            'reply': "Atmospheric sensors read clear skies, optimal tactical visibility. Good day to get your hands dirty.",
+            'actions': []
+        })
+
+    # General Tactical Intel & Q&A
+    if any(q in lower for q in ['what can you do', 'what are your commands', 'help', 'instructions', 'capabilities']):
+        return JsonResponse({
+            'reply': "I control your full operational grid: Schedule, Tasks, Reminders, Daily Plan, Calendar, Recon Search, AI Phone Service, and Autonomous Recon Agents. Speak your orders or ask for a sitrep.",
+            'actions': []
+        })
+
+    if any(q in lower for q in ['quantum computing', 'quantum']):
+        return JsonResponse({
+            'reply': "Quantum computing utilizes quantum superposition and entanglement to execute cryptographic and logistical calculations exponentially faster than classical systems. Crucial military technology.",
+            'actions': []
+        })
+
+    if any(q in lower for q in ['who made you', 'who created you', 'who built you']):
+        return JsonResponse({
+            'reply': "Engineered for Task Force 141 special operations. Lieutenant Simon 'Ghost' Riley, standing by.",
+            'actions': []
+        })
+
+    if any(q in lower for q in ['captain price', 'who is price']):
+        return JsonResponse({
+            'reply': "Captain John Price. Bravo Six. Commander of Task Force 141. Legendary leader in the field.",
+            'actions': []
+        })
+
+    if any(q in lower for q in ['soap', 'who is soap', 'mactavish']):
+        return JsonResponse({
+            'reply': "Sergeant Johnny 'Soap' MacTavish. Demolitions expert, sniper, and 141 frontline brother.",
+            'actions': []
+        })
+
+    if any(q in lower for q in ['makarov', 'vladimir makarov']):
+        return JsonResponse({
+            'reply': "Vladimir Makarov. Primary hostile target. Extreme threat to international security. We find him and take him down.",
+            'actions': []
+        })
+
+    if any(q in lower for q in ['what is task force 141', 'what is 141', 'task force 141']):
+        return JsonResponse({
+            'reply': "Task Force 141: Multinational Tier 1 special operations unit. The world's finest operators handpicked for the most dangerous missions.",
+            'actions': []
+        })
+
     # --- THEME SWITCH ---
     if 'dark mode' in lower or 'theme dark' in lower or 'night vision' in lower:
         return JsonResponse({
@@ -919,11 +985,13 @@ def api_command(request):
             })
         return JsonResponse({'reply': f"Negative. No active objective matching '{target}'. Check your coordinates.", 'actions': []})
 
-    # 1d. Add Task
+    # 1d. Add Task (supports explicit 'add task ...' or natural imperative action verbs: book, prepare, buy, send, fix, etc.)
     m_task = re.search(r'^(?:add (?:a )?task|create (?:a )?task|new task|todo|task)[:\s]+(?:to\s+)?(.+)', clean_text, re.IGNORECASE)
     if not m_task:
-        m_task = re.search(r'^(?:secure|infiltrate|recon|eliminate|deploy|monitor)\s+(.+)', clean_text, re.IGNORECASE)
-        task_text = clean_text if m_task else None
+        action_verbs = r'^(?:secure|infiltrate|recon|eliminate|deploy|monitor|book|prepare|buy|send|fix|order|write|check|review|update|organize|clean)\b'
+        is_action = bool(re.search(action_verbs, clean_text, re.IGNORECASE))
+        is_other = bool(re.search(r'^(?:schedule|remind|book meeting|search|find intel|remember|delete|remove|clear|simulate|who|what|how|where|why)', clean_text, re.IGNORECASE))
+        task_text = clean_text if (is_action and not is_other) else None
     else:
         task_text = m_task.group(1).strip()
 
@@ -1275,6 +1343,9 @@ def api_command(request):
     # 8d. Tamil Comms
     if any(w in lower for w in ['வணக்கம்', 'காலை வணக்கம்', 'வணக்கமுங்க']):
         return JsonResponse({'reply': 'வணக்கம். லெப்டினன்ட் கோஸ்ட் தயார் நிலையில் உள்ளேன். என்ன உத்தரவு?', 'actions': []})
+    if any(w in lower for w in ['நேரம் என்ன', 'இப்போது நேரம் என்ன', 'மணி என்ன']):
+        t_24 = now_dt.strftime('%H:%M')
+        return JsonResponse({'reply': f"தற்போதைய நேரம் {t_24} மணி. கண்காணிப்பில் உள்ளேன்.", 'actions': []})
     if 'வேலை' in lower or 'டாஸ்க்' in lower:
         open_tasks = list(Task.objects.filter(completed=False).values_list('text', flat=True))
         reply = f"செயலில் உள்ள பணிகள்: {', '.join(open_tasks[:3])}. கண்காணிப்பில் உள்ளேன்." if open_tasks else "எல்லா பணிகளும் முடிந்தது. புதிய உத்தரவுக்காக காத்திருக்கிறேன்."
